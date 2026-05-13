@@ -8,7 +8,6 @@
 <script type="module" id="fb-init">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getFirestore, doc, setDoc, onSnapshot, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAN9Iyhc5Bi9GJMt5KA6Q4Ez8LmZ6fDQro",
@@ -21,43 +20,9 @@ const firebaseConfig = {
 
 const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
-const auth = getAuth(fbApp);
-const provider = new GoogleAuthProvider();
-
-window._fb = { db, doc, setDoc, onSnapshot, getDoc, auth, provider, signInWithPopup, signOut };
-
-onAuthStateChanged(auth, user => {
-  const loginScreen = document.getElementById('login-screen');
-  const appShell = document.getElementById('app-shell');
-  if(user){
-    const email = user.email || '';
-    if(!email.endsWith('@inflectionpointlearning.com')){
-      signOut(auth);
-      loginScreen.style.display='flex';
-      appShell.style.display='none';
-      document.getElementById('login-error').textContent='Only @inflectionpointlearning.com accounts are allowed.';
-      return;
-    }
-    loginScreen.style.display='none';
-    appShell.style.display='flex';
-    document.getElementById('user-label').textContent=user.displayName||email;
-    window._fbReady=true;
-    window.dispatchEvent(new Event('fb-ready'));
-  } else {
-    loginScreen.style.display='flex';
-    appShell.style.display='none';
-  }
-});
-
-window.fbSignIn = async () => {
-  try{
-    document.getElementById('login-error').textContent='';
-    await signInWithPopup(auth, provider);
-  }catch(e){
-    document.getElementById('login-error').textContent='Sign-in failed. Please try again.';
-  }
-};
-window.fbSignOut = () => signOut(auth);
+window._fb = { db, doc, setDoc, onSnapshot, getDoc };
+window._fbReady = true;
+window.dispatchEvent(new Event('fb-ready'));
 </script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -73,7 +38,7 @@ window.fbSignOut = () => signOut(auth);
   --r:10px;--rl:14px;
 }
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;height:100vh;overflow:hidden;margin:0}
-.app{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;overflow:hidden}
+.app{display:flex;flex-direction:column;width:100%;height:100vh;overflow:hidden}
 
 .hdr{background:var(--text);color:#f7f6f2;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
 .hdr-left{display:flex;align-items:center;gap:8px}
@@ -326,23 +291,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 </head>
 <body>
-
-<!-- Login screen -->
-<div id="login-screen" style="position:fixed;inset:0;display:flex;height:100vh;align-items:center;justify-content:center;background:var(--bg);flex-direction:column;gap:20px;z-index:999">
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:40px 48px;text-align:center;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.08)">
-    <div style="font-size:11px;font-family:monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Inflection Point Learning</div>
-    <div style="font-size:20px;font-weight:600;color:var(--text);margin-bottom:6px">Math Training Scheduler</div>
-    <div style="font-size:13px;color:var(--text2);margin-bottom:28px;line-height:1.5">Sign in with your @inflectionpointlearning.com Google account to continue.</div>
-    <button onclick="fbSignIn()" style="font-family:inherit;font-size:14px;font-weight:500;padding:11px 24px;border-radius:var(--r);border:1px solid var(--border);background:var(--text);color:var(--bg);cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:10px">
-      <svg width="18" height="18" viewBox="0 0 48 48" style="flex-shrink:0"><path fill="#fff" d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/></svg>
-      Sign in with Google
-    </button>
-    <div id="login-error" style="margin-top:12px;font-size:12px;color:var(--red);min-height:18px"></div>
-  </div>
-</div>
-
-<!-- App shell (hidden until signed in) -->
-<div id="app-shell" style="display:none;flex-direction:column;width:100%;height:100vh;overflow:hidden">
 <div class="app">
 
 <div class="hdr">
@@ -354,15 +302,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="hdr-actions">
     <span id="gcalStatus" style="font-size:11px;font-family:monospace;color:#888">No calendars set</span>
     <span id="syncStatus" style="font-size:11px;font-family:monospace;color:#888;display:flex;align-items:center;gap:4px"></span>
-    <span id="user-label" style="font-size:11px;font-family:monospace;color:#aaa"></span>
-    <button class="btn sm" style="color:#f7f6f2;border-color:#444;background:#333" onclick="fbSignOut()">
-      <svg viewBox="0 0 14 14"><path d="M5 2H2v10h3"/><polyline points="9,4 12,7 9,10"/><line x1="12" y1="7" x2="5" y2="7"/></svg>
-      Sign out
-    </button>
     <button class="btn sm" style="color:#e8eff8;border-color:#1a4d8f;background:#1a4d8f" onclick="refreshFromSheet()">
       <svg viewBox="0 0 13 13"><path d="M11 6.5A4.5 4.5 0 1 1 6.5 2.5"/><polyline points="6.5,1 11,2.5 9.5,7"/></svg>
-      Refresh
-    </button>
       Refresh
     </button>
     <button class="btn sm" style="color:var(--bg);border-color:#555;background:#333" onclick="openPeople()">
@@ -484,10 +425,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="m-body">
     <div class="fg"><label>School name</label><input id="fSchool" type="text" placeholder="e.g. Lincoln Elementary"></div>
     <div class="row2">
+      <div class="fg"><label>Entity type</label><select id="fSchoolEntity"><option>Single school</option><option>District</option></select></div>
       <div class="fg"><label>School type</label><select id="fSchoolType"><option>New school</option><option>Returning</option></select></div>
-      <div class="fg"><label>School size</label><select id="fSchoolSize"><option>Small (1–5 teachers)</option><option>Medium (6–15 teachers)</option><option>Large (16+ teachers)</option></select></div>
     </div>
-    <div class="fg"><label>Notes</label><input id="fSchoolNotes" type="text" placeholder="District, contact, etc."></div>
+    <div class="row2">
+      <div class="fg"><label>School size</label><select id="fSchoolSize"><option>Small (1–5 teachers)</option><option>Medium (6–15 teachers)</option><option>Large (16+ teachers)</option></select></div>
+      <div class="fg"><label>Notes</label><input id="fSchoolNotes" type="text" placeholder="District, contact, etc."></div>
+    </div>
   </div>
   <div class="m-foot">
     <button class="btn" onclick="closeSchoolModal()">Cancel</button>
@@ -853,7 +797,7 @@ function renderCards(){
     const fP=document.getElementById('fPerson').value;
     if(fP&&!scSess.some(se=>(se.staff||[]).includes(parseInt(fP)))) return false;
     return true;
-  });
+  }).sort((a,b)=>a.name.localeCompare(b.name));
 
   const el=document.getElementById('cardList');
   if(!schools.length){
@@ -877,6 +821,7 @@ function renderCards(){
         <div class="card-hdr-main">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
             <span class="badge ${sc.type==='New school'?'b-new':'b-ret'}">${sc.type==='New school'?'New':'Returning'}</span>
+            ${sc.entity==='District'?`<span class="badge" style="background:#f0e8fc;color:#5a2d8f">District</span>`:''}
           </div>
           <div class="card-name">${sc.name}</div>
           <div class="card-summary">${sessCount===0?'No sessions yet':sessCount+' session'+(sessCount>1?'s':'')+(schedCount?' · '+schedCount+' scheduled':' · none scheduled')}${sc.notes?' · '+sc.notes:''}</div>
@@ -903,7 +848,7 @@ function renderCards(){
               <span>${se.len}</span>
               ${sBadge(se.status)}
               ${se.dates?`<span style="color:var(--text2)">${se.dates}</span>`:''}
-              ${se.startTime?(()=>{const tzL={'America/Los_Angeles':'PT','America/Denver':'MT','America/Chicago':'CT','America/New_York':'ET','America/Anchorage':'AKT','Pacific/Honolulu':'HT'};return `<span style="color:var(--text2)">${se.startTime}${se.timezone?' '+(tzL[se.timezone]||''):''}</span>`;})():''}
+              ${se.startTime?(()=>{const tzL={'America/Los_Angeles':'PT','America/Denver':'MT','America/Chicago':'CT','America/New_York':'ET','America/Anchorage':'AKT','Pacific/Honolulu':'HT'};const vt=fmtSessionTime(se,new Date());return `<span style="color:var(--text2)">${vt||se.startTime+' '+(tzL[se.timezone]||'')}</span>`;})():''}
             </div>
             ${staffPeople.length?`<div style="display:flex;align-items:center;gap:4px;margin-top:5px;flex-wrap:wrap">
               ${staffPeople.map(p=>av(p)).join('')}
@@ -1198,8 +1143,9 @@ function openAddSchool(){
   editSchoolId=null;
   document.getElementById('schoolModalTitle').textContent='Add school';
   document.getElementById('fSchool').value='';
+  document.getElementById('fSchoolEntity').value='Single school';
   document.getElementById('fSchoolType').value='New school';
-  document.getElementById('fSchoolSize').value='Small (<300)';
+  document.getElementById('fSchoolSize').value='Small (1–5 teachers)';
   document.getElementById('fSchoolNotes').value='';
   document.getElementById('schoolModal').style.display='flex';
 }
@@ -1207,6 +1153,7 @@ function openEditSchool(id){
   const sc=schools.find(x=>x.id===id); editSchoolId=id;
   document.getElementById('schoolModalTitle').textContent='Edit — '+sc.name;
   document.getElementById('fSchool').value=sc.name;
+  document.getElementById('fSchoolEntity').value=sc.entity||'Single school';
   document.getElementById('fSchoolType').value=sc.type;
   document.getElementById('fSchoolSize').value=sc.size;
   document.getElementById('fSchoolNotes').value=sc.notes||'';
@@ -1217,6 +1164,7 @@ function saveSchool(){
   const name=document.getElementById('fSchool').value.trim(); if(!name)return;
   const entry={
     id:editSchoolId||nextSchoolId++, name,
+    entity:document.getElementById('fSchoolEntity').value,
     type:document.getElementById('fSchoolType').value,
     size:document.getElementById('fSchoolSize').value,
     notes:document.getElementById('fSchoolNotes').value.trim(),
@@ -1579,23 +1527,15 @@ function renderWeekCal(){
 
 
 // ── Time helpers ──────────────────────────────────────────
-// Given a date object (local midnight), a "HH:MM" string, and an IANA tz,
-// return a formatted Pacific time string like "9:00 AM PT"
-function toPacific(dateObj, timeStr, tz){
-  if(!timeStr||!tz) return null;
+// Convert a session's stored time (in the school's tz) to the viewer's local timezone
+function toViewerTime(dateObj, timeStr, schoolTz){
+  if(!timeStr||!schoolTz) return null;
   const [h,m]=timeStr.split(':').map(Number);
-  // Build an ISO string in the school's timezone using Intl
-  // We use a trick: format the date in the source tz, then parse as UTC offset
   try{
-    // Create a date representing the session start in the school's tz
     const year=dateObj.getFullYear(), mo=dateObj.getMonth(), day=dateObj.getDate();
-    // Get the UTC offset for that tz on that date by formatting
     const refDate=new Date(Date.UTC(year,mo,day,h,m,0));
-    // Use Intl to get what that UTC time looks like in the source tz
-    const fmtSrc=new Intl.DateTimeFormat('en-US',{timeZone:tz,hour:'numeric',minute:'2-digit',hour12:false});
-    // Instead: directly construct local time in tz using offset trick
-    // Format the target hour in the source tz offset
-    const offsetStr=new Intl.DateTimeFormat('en-US',{timeZone:tz,timeZoneName:'shortOffset'}).format(refDate);
+    // Get UTC offset of the school's timezone
+    const offsetStr=new Intl.DateTimeFormat('en-US',{timeZone:schoolTz,timeZoneName:'shortOffset'}).format(refDate);
     const offsetMatch=offsetStr.match(/GMT([+-]\d+(?::\d+)?)/);
     let offsetMins=0;
     if(offsetMatch){
@@ -1604,18 +1544,21 @@ function toPacific(dateObj, timeStr, tz){
       const mins=parts[1]?parseInt(parts[1]):0;
       offsetMins=hrs*60+(hrs<0?-mins:mins);
     }
+    // Convert to true UTC, then format in viewer's local tz
     const utcMs=Date.UTC(year,mo,day,h,m,0)-offsetMins*60000;
-    const ptDate=new Date(utcMs);
-    const ptStr=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit',hour12:true}).format(ptDate);
-    return ptStr+' PT';
+    const localDate=new Date(utcMs);
+    // Viewer's local timezone via Intl (auto-detected)
+    const viewerTz=Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const localStr=new Intl.DateTimeFormat('en-US',{timeZone:viewerTz,hour:'numeric',minute:'2-digit',hour12:true,timeZoneName:'short'}).format(localDate);
+    return localStr;
   }catch(e){return null;}
 }
 
 function fmtSessionTime(sess, dateObj){
   if(!sess.startTime) return null;
-  if(!sess.timezone) return sess.startTime; // no tz, show raw
-  const d = dateObj || new Date();
-  return toPacific(d, sess.startTime, sess.timezone);
+  if(!sess.timezone) return sess.startTime;
+  const d=dateObj||new Date();
+  return toViewerTime(d, sess.startTime, sess.timezone);
 }
 
 // ── Session popover ───────────────────────────────────────
@@ -1627,7 +1570,7 @@ function openSesDetail(event, sessId){
   const firstDate=parseDatesFromStr(sess.dates)[0]||new Date();
   const ptTime=fmtSessionTime(sess, firstDate);
   const tzLabels={'America/Los_Angeles':'PT','America/Denver':'MT','America/Chicago':'CT','America/New_York':'ET','America/Anchorage':'AKT','Pacific/Honolulu':'HT'};
-
+  const viewerTime=fmtSessionTime(sess, firstDate);
   document.getElementById('popTitle').textContent=sess.label||'Session';
   document.getElementById('popSchool').textContent=school?.name||'';
   document.getElementById('popRows').innerHTML=`
@@ -1635,8 +1578,8 @@ function openSesDetail(event, sessId){
     <div class="ses-pop-row"><strong>Length</strong>${sess.len}</div>
     <div class="ses-pop-row"><strong>Status</strong>${sess.status}</div>
     ${sess.dates?`<div class="ses-pop-row"><strong>Dates</strong>${sess.dates}</div>`:''}
-    ${sess.startTime?`<div class="ses-pop-row"><strong>Start time</strong>${sess.startTime}${sess.timezone?' '+tzLabels[sess.timezone]||'':''}</div>`:''}
-    ${ptTime&&sess.timezone!=='America/Los_Angeles'?`<div class="ses-pop-row"><strong>In PT</strong>${ptTime}</div>`:''}
+    ${sess.startTime?`<div class="ses-pop-row"><strong>School time</strong>${sess.startTime} ${tzLabels[sess.timezone]||sess.timezone||''}</div>`:''}
+    ${viewerTime?`<div class="ses-pop-row"><strong>Your time</strong>${viewerTime}</div>`:''}
     ${staffNames?`<div class="ses-pop-row"><strong>Staff</strong>${staffNames}</div>`:''}
     ${sess.notes?`<div class="ses-pop-row"><strong>Notes</strong>${sess.notes}</div>`:''}
   `;
@@ -1793,6 +1736,5 @@ if(window._fbReady) initFirebase();
 else window.addEventListener('fb-ready', initFirebase, {once:true});
 </script>
 </div><!-- end .app -->
-</div><!-- end #app-shell -->
 </body>
 </html>
