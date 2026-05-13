@@ -43,10 +43,12 @@ onAuthStateChanged(auth, user => {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-root').style.display = 'flex';
     document.getElementById('user-label').textContent = user.displayName || user.email;
+    currentUserEmail = user.email;
     if(!window._fbReady){
       window._fbReady = true;
       window.dispatchEvent(new Event('fb-ready'));
     }
+    applyRoleUI();
   } else {
     if(user) signOut(auth); // wrong domain
     document.getElementById('login-screen').style.display = 'flex';
@@ -132,6 +134,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .b-conf{background:var(--blue-bg);color:var(--blue)}
 .b-pend{background:var(--amber-bg);color:var(--amber)}
 .b-none{background:var(--surface2);color:var(--text3)}
+.b-done{background:#f0efe9;color:#6b6960;text-decoration:line-through}
 
 .av{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;border:1.5px solid var(--surface);flex-shrink:0;text-transform:uppercase}
 
@@ -359,12 +362,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <svg viewBox="0 0 13 13"><path d="M11 6.5A4.5 4.5 0 1 1 6.5 2.5"/><polyline points="6.5,1 11,2.5 9.5,7"/></svg>
       Refresh
     </button>
-    <button class="btn sm" style="color:var(--bg);border-color:#555;background:#333" onclick="openPeople()">
+    <button class="btn sm" style="color:var(--bg);border-color:#555;background:#333" onclick="openPeople()" id="btn-manage-team" style="display:none">
       <svg viewBox="0 0 14 14"><circle cx="7" cy="5" r="2.5"/><path d="M2 12c0-2.8 2.2-5 5-5s5 2.2 5 5"/></svg>
       Manage team
     </button>
-    <button class="btn sm danger" onclick="clearAll()">Clear all</button>
-    <button class="btn sm primary" onclick="openAddSchool()">
+    <button class="btn sm danger" onclick="clearAll()" id="btn-clear-all" style="display:none">Clear all</button>
+    <button class="btn sm primary" onclick="openAddSchool()" id="btn-add-school" style="display:none">
       <svg viewBox="0 0 12 12"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg>
       Add school
     </button>
@@ -400,7 +403,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <input type="text" id="search" placeholder="Search school…" oninput="renderCards()">
       <select id="fStatus" onchange="renderCards()">
         <option value="">All statuses</option>
-        <option>Scheduled</option><option>Confirmed</option><option>Pending date</option><option>No date yet</option>
+        <option>Scheduled</option><option>Confirmed</option><option>Pending date</option><option>No date yet</option><option>Completed</option>
       </select>
       <select id="fMode" onchange="renderCards()">
         <option value="">All modes</option>
@@ -483,7 +486,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="row2">
       <div class="fg"><label>School size</label><select id="fSchoolSize"><option>Small (1–5 teachers)</option><option>Medium (6–15 teachers)</option><option>Large (16+ teachers)</option></select></div>
-      <div class="fg"><label>Notes</label><input id="fSchoolNotes" type="text" placeholder="District, contact, etc."></div>
+      <div class="fg"><label>Notes</label><input id="fSchoolNotes" type="text" placeholder=""></div>
     </div>
   </div>
   <div class="m-foot">
@@ -528,7 +531,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
     <div class="fg"><label>Status</label>
-      <select id="fSesStat"><option>No date yet</option><option>Pending date</option><option>Scheduled</option><option>Confirmed</option></select>
+      <select id="fSesStat"><option>No date yet</option><option>Pending date</option><option>Scheduled</option><option>Confirmed</option><option>Completed</option></select>
     </div>
     <div id="travelDaySection" style="display:none;background:var(--amber-bg);border-radius:var(--r);padding:10px 12px;margin-bottom:12px">
       <div style="font-size:11px;font-weight:600;color:var(--amber);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Travel days (in-person)</div>
@@ -613,6 +616,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 let schools = [];
 let sessions = [];
 let people = [];
+
+// ── Admin access ──────────────────────────────────────────
+const ADMIN_EMAILS = [
+  'jkirberger@inflectionpointlearning.com',
+  'lmelia@inflectionpointlearning.com',
+  'abateman@inflectionpointlearning.com',
+];
+let currentUserEmail = '';
+function isAdmin(){ return ADMIN_EMAILS.includes(currentUserEmail); }
+
+function applyRoleUI(){
+  const admin = isAdmin();
+  ['btn-manage-team','btn-clear-all','btn-add-school'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.display=admin?'':'none';
+  });
+}
 let nextSchoolId = 1;
 let nextSessionId = 1;
 let nextPersonId = 1;
@@ -801,7 +821,7 @@ function leads(){ return people.filter(p=>p.role==='lead'); }
 function supports(){ return people.filter(p=>p.role==='support'); }
 
 function sBadge(s){
-  const m={Scheduled:'b-sched',Confirmed:'b-conf','Pending date':'b-pend','No date yet':'b-none'};
+  const m={Scheduled:'b-sched',Confirmed:'b-conf','Pending date':'b-pend','No date yet':'b-none',Completed:'b-done'};
   return `<span class="badge ${m[s]||'b-none'}">${s}</span>`;
 }
 function modeBadge(m){ return `<span class="badge ${m==='Virtual'?'b-virt':'b-inp'}">${m}</span>`; }
@@ -883,8 +903,8 @@ function renderCards(){
         </div>
         <div style="display:flex;align-items:center;gap:4px">
           <div class="card-actions" onclick="event.stopPropagation()">
-            <button class="icon-btn" onclick="openEditSchool(${sc.id})" title="Edit school">${IC.edit}</button>
-            <button class="icon-btn" onclick="deleteSchool(${sc.id})" title="Delete school" style="color:var(--red)">${IC.trash}</button>
+            ${isAdmin()?`<button class="icon-btn" onclick="openEditSchool(${sc.id})" title="Edit school">${IC.edit}</button>
+            <button class="icon-btn" onclick="deleteSchool(${sc.id})" title="Delete school" style="color:var(--red)">${IC.trash}</button>`:''}
           </div>
           <div class="card-chevron">${IC.chD}</div>
         </div>
@@ -911,14 +931,12 @@ function renderCards(){
             </div>`:`<div style="margin-top:5px;font-size:11px;color:var(--text3)">No staff assigned</div>`}
           </div>
           <div class="session-actions" onclick="event.stopPropagation()">
-            <button class="icon-btn" onclick="openEditSession(${se.id})" title="Edit session">${IC.edit}</button>
-            <button class="icon-btn" onclick="deleteSession(${se.id})" title="Delete session" style="color:var(--red)">${IC.trash}</button>
+            ${isAdmin()?`<button class="icon-btn" onclick="openEditSession(${se.id})" title="Edit session">${IC.edit}</button>
+            <button class="icon-btn" onclick="deleteSession(${se.id})" title="Delete session" style="color:var(--red)">${IC.trash}</button>`:''}
           </div>
         </div>`;}).join('')}
         <div class="add-session-row">
-          <button class="btn xs" onclick="openAddSession(${sc.id})">
-            ${IC.plus} Add session
-          </button>
+          ${isAdmin()?`<button class="btn xs" onclick="openAddSession(${sc.id})">${IC.plus} Add session</button>`:''}
         </div>
       </div>
     </div>`;
@@ -980,18 +998,18 @@ function renderSide(){
   <div class="sp-sec">
     <div class="sp-sec-title">Staff assignment${isTravel?` <span class="ttag">Travel</span>`:''}</div>
     <div id="assignArea"></div>
-    <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+    ${isAdmin()?`<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn sm primary" onclick="saveAssign()">${IC.save} Save</button>
       ${(sess.status==='Scheduled'||sess.status==='Confirmed')?`<button class="btn sm" onclick="addToGCal()" style="color:var(--green);border-color:#b0d8b8">${IC.calp} Add to calendar</button>`:''}
-    </div>
+    </div>`:''}
   </div>
 
-  <div class="sp-sec">
+  ${isAdmin()?`<div class="sp-sec">
     <div class="sp-sec-title">Proposed dates</div>
     <input id="datesInput" type="text" value="${sess.dates||''}" placeholder="Aug 12, Aug 19…"
       style="width:100%;font-family:inherit;font-size:13px;padding:6px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);color:var(--text);margin-bottom:8px">
     <button class="btn sm primary" onclick="saveDates()">${IC.check} Save dates</button>
-  </div>
+  </div>`:''}
 
   <div class="sp-sec">
     <div class="sp-sec-title">Status</div>
@@ -1000,8 +1018,15 @@ function renderSide(){
       <option${sess.status==='Pending date'?' selected':''}>Pending date</option>
       <option${sess.status==='Scheduled'?' selected':''}>Scheduled</option>
       <option${sess.status==='Confirmed'?' selected':''}>Confirmed</option>
+      <option${sess.status==='Completed'?' selected':''}>Completed</option>
     </select>
     <button class="btn sm primary" onclick="updateStatus()">${IC.check} Update</button>
+  </div>
+
+  <div class="sp-sec">
+    <div class="sp-sec-title">Notes</div>
+    <textarea id="notesInput" style="width:100%;font-family:inherit;font-size:13px;padding:6px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);color:var(--text);height:70px;resize:vertical;margin-bottom:8px" placeholder="Add notes…">${sess.notes||''}</textarea>
+    <button class="btn sm primary" onclick="saveNotes()">${IC.check} Save notes</button>
   </div>`;
 
   renderWeekView(sess);
@@ -1075,7 +1100,7 @@ function assignRow(person, sess){
       <div><div class="asgn-name">${person.name}${person.role==='support'?` <span class="stag">other</span>`:''}</div>${aHtml}</div>
     </div>
     ${isT?`<span class="ttag">Travel</span>`:''}
-    <button class="toggle ${on?'on':'off'}" onclick="toggleStaff(${person.id})" aria-label="${on?'Remove':'Assign'} ${person.name}"></button>
+    <button class="toggle ${on?'on':'off'}" onclick="${isAdmin()?`toggleStaff(${person.id})`:'return false'}" ${isAdmin()?'':'disabled style="opacity:0.5;cursor:default"'} aria-label="${on?'Remove':'Assign'} ${person.name}"></button>
   </div>`;
 }
 
@@ -1107,6 +1132,15 @@ function updateStatus(){
   const sess=sessions.find(x=>x.id===activeSessionId);
   const sel=document.getElementById('statusSel');
   if(sess&&sel){sess.status=sel.value; persist(); renderCards(); updateStats();}
+}
+
+function saveNotes(){
+  const sess=sessions.find(x=>x.id===activeSessionId); if(!sess)return;
+  sess.notes=document.getElementById('notesInput').value.trim();
+  persist(); renderCards();
+  const btn=event.currentTarget; const orig=btn.innerHTML;
+  btn.innerHTML=`${IC.check} Saved`; btn.disabled=true;
+  setTimeout(()=>{btn.innerHTML=orig;btn.disabled=false;},1200);
 }
 
 // ── GCal ──────────────────────────────────────────────────
@@ -1638,6 +1672,7 @@ function openSesDetail(event, sessId){
     ${staffNames?`<div class="ses-pop-row"><strong>Staff</strong>${staffNames}</div>`:''}
     ${sess.notes?`<div class="ses-pop-row"><strong>Notes</strong>${sess.notes}</div>`:''}
   `;
+  document.getElementById('popEditBtn').style.display=isAdmin()?'':'none';
   document.getElementById('popEditBtn').onclick=()=>{closeSesDetail();openEditSession(sessId);};
 
   const pop=document.getElementById('sesPopover');
