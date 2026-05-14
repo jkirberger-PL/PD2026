@@ -1007,7 +1007,7 @@ function renderSide(){
     <div id="assignArea"></div>
     ${isAdmin()?`<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn sm primary" onclick="saveAssign()">${IC.save} Save</button>
-      ${(sess.status==='Scheduled'||sess.status==='Confirmed')?`<button class="btn sm" onclick="addToGCal()" style="color:var(--green);border-color:#b0d8b8">${IC.calp} Add to calendar</button>`:''}
+      ${(sess.status==='Scheduled'||sess.status==='Confirmed'||sess.status==='Pending date')?`<button class="btn sm" onclick="addToGCal()" style="color:var(--green);border-color:#b0d8b8">${IC.calp} Add to calendar</button>`:''}
     </div>`:''}
   </div>
 
@@ -1208,25 +1208,68 @@ async function loadWkEvents(){
   renderWeekView(sess);
 }
 
-async function addToGCal(){
+function addToGCal(){
   const sess=sessions.find(x=>x.id===activeSessionId);
   const school=sess?schools.find(x=>x.id===sess.schoolId):null;
-  if(!sharedCalId){alert('Set a shared training calendar ID in Manage Team.');return;}
-  const btn=event.currentTarget; btn.innerHTML=`<span class="spin"></span>`; btn.disabled=true;
-  const staffNames=(sess.staff||[]).map(id=>{const p=people.find(x=>x.id===id);return p?p.name:'';}).filter(Boolean).join(', ');
-  try{
-    await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',max_tokens:300,
-        system:'Create a Google Calendar event via MCP. Return {"success":true} or {"success":false}.',
-        messages:[{role:'user',content:`Create on "${sharedCalId}": "${school?.name||''} — ${sess.label||'Training'} (${sess.mode})", date ${sess.dates?.split(',')[0]?.trim()||'TBD'}, duration ${sess.len}, staff: ${staffNames}.`}],
-        mcp_servers:[{type:'url',url:'https://calendarmcp.googleapis.com/mcp/v1',name:'gcal'}]
-      })
-    });
-    btn.innerHTML=`${IC.check} Added!`; btn.style.color='var(--green)';
-  }catch{btn.innerHTML='Failed'; btn.style.color='var(--red)';}
-  setTimeout(()=>{btn.innerHTML=`${IC.calp} Add to calendar`;btn.style.color='';btn.disabled=false;},2500);
+  if(!sess){return;}
+
+  // Parse the first proposed date
+  const firstDate=parseDatesFromStr(sess.dates)[0]||null;
+
+  // Build start/end datetimes in the session's timezone
+  // Google Calendar URL format: 20260814T090000 (local time, no Z)
+  function toGCalDt(dateObj, timeStr, addMins){
+    const d=new Date(dateObj);
+    let h=9, m=0;
+    if(timeStr){ [h,m]=timeStr.split(':').map(Number); }
+    if(addMins){ h+=Math.floor(addMins/60); m+=addMins%60; if(m>=60){h++;m-=60;} }
+    const pad=n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(h)}${pad(m)}00`;
+  }
+
+  // Figure out duration in minutes from session length
+  const durMap={
+    'Full day (8 hrs)':480,'Full day (6 hrs)':360,
+    'Half day (4 hrs)':240,'Half day (3 hrs)':180,
+    '2 hours':120,'1 hour':60
+  };
+  const durMins=durMap[sess.len]||60;
+
+  const startDt=firstDate?toGCalDt(firstDate, sess.startTime, 0):'';
+  const endDt=firstDate?toGCalDt(firstDate, sess.startTime, durMins):'';
+
+  // Collect staff emails (calendar IDs) for invites
+  const staffPeople=(sess.staff||[]).map(id=>people.find(p=>p.id===id)).filter(Boolean);
+  const staffEmails=staffPeople.map(p=>p.calId).filter(Boolean);
+  const staffNames=staffPeople.map(p=>p.name).join(', ');
+
+  // Build event title and description
+  const title=`${sess.label||'Math Training'} — ${school?.name||''}`;
+  const desc=[
+    `School: ${school?.name||''}`,
+    `Mode: ${sess.mode}`,
+    `Length: ${sess.len}`,
+    `Staff: ${staffNames||'TBD'}`,
+    sess.notes?`Notes: ${sess.notes}`:'',
+    '',
+    'Created by PL Team Math Training Scheduler'
+  ].filter(Boolean).join('\n');
+
+  // Build Google Calendar URL
+  const params=new URLSearchParams({
+    action:'TEMPLATE',
+    text:title,
+    details:desc,
+    ...(startDt&&endDt?{dates:`${startDt}/${endDt}`}:{}),
+    ...(sess.timezone?{ctz:sess.timezone}:{}),
+    // add=guests (comma separated emails)
+    ...(staffEmails.length?{add:staffEmails.join(',')}:{}),
+    // Google Meet is added automatically when conferencing=1 in new Google Calendar
+    conferencing:'meet',
+  });
+
+  const url=`https://calendar.google.com/calendar/render?${params.toString()}`;
+  window.open(url,'_blank');
 }
 
 function parseDate(str){
