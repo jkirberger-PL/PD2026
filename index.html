@@ -204,6 +204,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .role-pill{font-size:10px;padding:1px 6px;border-radius:10px;font-weight:500}
 .role-lead{background:var(--blue-bg);color:var(--blue)}
 .role-support{background:var(--surface2);color:var(--text3)}
+.role-sales{background:var(--green-bg);color:var(--green)}
+.role-success{background:var(--amber-bg);color:var(--amber)}
 
 /* Modal */
 .modal-bg{position:fixed;inset:0;background:rgba(15,13,10,.5);display:flex;align-items:center;justify-content:center;z-index:50}
@@ -488,6 +490,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="fg"><label>School size</label><select id="fSchoolSize"><option>Small (1–5 teachers)</option><option>Medium (6–15 teachers)</option><option>Large (16+ teachers)</option></select></div>
       <div class="fg"><label>Notes</label><input id="fSchoolNotes" type="text" placeholder=""></div>
     </div>
+    <div class="fg"><label>School data spreadsheet link <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text3)">(paste Google Sheets URL)</span></label>
+      <input id="fSchoolSheet" type="text" placeholder="https://docs.google.com/spreadsheets/d/..."></div>
   </div>
   <div class="m-foot">
     <button class="btn" onclick="closeSchoolModal()">Cancel</button>
@@ -563,7 +567,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div style="font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">Add person</div>
       <div class="row2" style="margin-bottom:10px">
         <div class="fg" style="margin-bottom:0"><label>Name</label><input id="newName" type="text" placeholder="e.g. Jordan Smith"></div>
-        <div class="fg" style="margin-bottom:0"><label>Role</label><select id="newRole"><option value="lead">PLS</option><option value="support">Other</option></select></div>
+        <div class="fg" style="margin-bottom:0"><label>Role</label><select id="newRole"><option value="lead">PLS</option><option value="support">Other</option><option value="sales">Sales</option><option value="success">School Success</option></select></div>
       </div>
       <div class="fg" style="margin-bottom:10px">
         <label>Google Calendar ID <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text3)">(usually their work email)</span></label>
@@ -597,7 +601,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="m-body">
     <input type="hidden" id="editPersonId">
     <div class="fg"><label>Name</label><input id="editPersonName" type="text"></div>
-    <div class="fg"><label>Role</label><select id="editPersonRole"><option value="lead">PLS</option><option value="support">Other</option></select></div>
+    <div class="fg"><label>Role</label><select id="editPersonRole"><option value="lead">PLS</option><option value="support">Other</option><option value="sales">Sales</option><option value="success">School Success</option></select></div>
     <div class="fg"><label>Google Calendar ID</label><input id="editPersonCal" type="text" placeholder="person@yourschool.org" style="font-family:monospace;font-size:12px"></div>
   </div>
   <div class="m-foot">
@@ -826,6 +830,9 @@ function sBadge(s){
 }
 function modeBadge(m){ return `<span class="badge ${m==='Virtual'?'b-virt':'b-inp'}">${m}</span>`; }
 
+function roleLabel(r){ return {lead:'PLS',support:'Other',sales:'Sales',success:'School Success'}[r]||r; }
+function roleClass(r){ return {lead:'role-lead',support:'role-support',sales:'role-sales',success:'role-success'}[r]||'role-support'; }
+
 function updateGcalStatus(){
   const n=people.filter(p=>p.calId).length;
   const el=document.getElementById('gcalStatus');
@@ -837,7 +844,7 @@ function updatePersonFilter(){
   const sel=document.getElementById('fPerson'); if(!sel)return;
   const cur=sel.value;
   sel.innerHTML='<option value="">All team members</option>'+
-    people.map(p=>`<option value="${p.id}"${String(p.id)===cur?' selected':''}>${p.name} (${p.role==='lead'?'PLS':'Other'})</option>`).join('');
+    people.map(p=>`<option value="${p.id}"${String(p.id)===cur?' selected':''}>${p.name} (${roleLabel(p.role)})</option>`).join('');
 }
 
 // ── Stats ─────────────────────────────────────────────────
@@ -898,7 +905,7 @@ function renderCards(){
             <span class="badge ${sc.type==='New school'?'b-new':'b-ret'}">${sc.type==='New school'?'New':'Returning'}</span>
             ${sc.entity==='District'?`<span class="badge" style="background:#f0e8fc;color:#5a2d8f">District</span>`:''}
           </div>
-          <div class="card-name">${sc.name}</div>
+          <div class="card-name">${sc.name}${sc.sheetUrl?` <a href="${sc.sheetUrl}" target="_blank" onclick="event.stopPropagation()" style="font-size:10px;font-weight:400;color:var(--blue);text-decoration:none;margin-left:4px" title="Open school spreadsheet">↗ Sheet</a>`:''}</div>
           <div class="card-summary">${sessCount===0?'No sessions yet':sessCount+' session'+(sessCount>1?'s':'')+(schedCount?' · '+schedCount+' scheduled':' · none scheduled')}${sc.notes?' · '+sc.notes:''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:4px">
@@ -1070,18 +1077,20 @@ function changeWeek(dir){
 // ── Staff assign ──────────────────────────────────────────
 function renderAssign(sess){
   const el=document.getElementById('assignArea'); if(!el)return;
-  const lList=leads(), sList=supports();
+  const groups=[
+    {key:'lead', label:'PLS', list:people.filter(p=>p.role==='lead')},
+    {key:'success', label:'School Success', list:people.filter(p=>p.role==='success')},
+    {key:'sales', label:'Sales', list:people.filter(p=>p.role==='sales')},
+    {key:'support', label:'Other', list:people.filter(p=>p.role==='support')},
+  ].filter(g=>g.list.length);
   let html='';
-  if(lList.length){
-    html+=`<div style="font-size:10px;color:var(--text3);margin-bottom:5px">PLS</div>`;
-    html+=lList.map(p=>assignRow(p,sess)).join('');
-  }
-  if(sList.length){
-    html+=`<div style="font-size:10px;color:var(--text3);margin-top:9px;margin-bottom:5px">Other</div>`;
-    html+=sList.map(p=>assignRow(p,sess)).join('');
-  }
-  if(!lList.length&&!sList.length){
+  if(!groups.length){
     html=`<div style="font-size:13px;color:var(--text3);padding:8px 0">No team members yet. <span style="cursor:pointer;text-decoration:underline;color:var(--blue)" onclick="openPeople()">Add team →</span></div>`;
+  } else {
+    groups.forEach((g,i)=>{
+      html+=`<div style="font-size:10px;color:var(--text3);${i>0?'margin-top:9px;':''}margin-bottom:5px">${g.label}</div>`;
+      html+=g.list.map(p=>assignRow(p,sess)).join('');
+    });
   }
   el.innerHTML=html;
 }
@@ -1097,7 +1106,7 @@ function assignRow(person, sess){
   return `<div class="asgn-row">
     <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0">
       ${av(person)}
-      <div><div class="asgn-name">${person.name}${person.role==='support'?` <span class="stag">other</span>`:''}</div>${aHtml}</div>
+      <div><div class="asgn-name">${person.name}${person.role!=='lead'?` <span class="stag">${roleLabel(person.role)}</span>`:''}</div>${aHtml}</div>
     </div>
     ${isT?`<span class="ttag">Travel</span>`:''}
     <button class="toggle ${on?'on':'off'}" onclick="${isAdmin()?`toggleStaff(${person.id})`:'return false'}" ${isAdmin()?'':'disabled style="opacity:0.5;cursor:default"'} aria-label="${on?'Remove':'Assign'} ${person.name}"></button>
@@ -1236,6 +1245,7 @@ function openAddSchool(){
   document.getElementById('fSchoolType').value='New school';
   document.getElementById('fSchoolSize').value='Small (1–5 teachers)';
   document.getElementById('fSchoolNotes').value='';
+  document.getElementById('fSchoolSheet').value='';
   document.getElementById('schoolModal').style.display='flex';
 }
 function openEditSchool(id){
@@ -1246,6 +1256,7 @@ function openEditSchool(id){
   document.getElementById('fSchoolType').value=sc.type;
   document.getElementById('fSchoolSize').value=sc.size;
   document.getElementById('fSchoolNotes').value=sc.notes||'';
+  document.getElementById('fSchoolSheet').value=sc.sheetUrl||'';
   document.getElementById('schoolModal').style.display='flex';
 }
 function closeSchoolModal(){document.getElementById('schoolModal').style.display='none';}
@@ -1257,6 +1268,7 @@ function saveSchool(){
     type:document.getElementById('fSchoolType').value,
     size:document.getElementById('fSchoolSize').value,
     notes:document.getElementById('fSchoolNotes').value.trim(),
+    sheetUrl:document.getElementById('fSchoolSheet').value.trim(),
   };
   if(editSchoolId) schools=schools.map(x=>x.id===editSchoolId?entry:x);
   else{ schools.push(entry); expandedSchools.add(entry.id); }
@@ -1375,7 +1387,7 @@ function renderPeopleList(){
 function personRow(p){
   return `<div class="person-row">${av(p,24)}
     <div class="person-info">
-      <div class="person-name-txt">${p.name} <span class="role-pill ${p.role==='lead'?'role-lead':'role-support'}">${p.role==='lead'?'PLS':'Other'}</span></div>
+      <div class="person-name-txt">${p.name} <span class="role-pill ${roleClass(p.role)}">${roleLabel(p.role)}</span></div>
       <div class="person-cal">${p.calId||'<span style="color:var(--text3)">No calendar ID</span>'}</div>
     </div>
     <button class="icon-btn" onclick="openEditPerson(${p.id})">${IC.edit}</button>
@@ -1743,7 +1755,12 @@ function renderStaffView(){
   document.getElementById('staffPeriodLabel').textContent=label;
 
   const staffMap=buildStaffMap(weekDates);
-  const allPeople=[...leads(),...supports()];
+  const allPeople=[
+    ...people.filter(p=>p.role==='lead'),
+    ...people.filter(p=>p.role==='success'),
+    ...people.filter(p=>p.role==='sales'),
+    ...people.filter(p=>p.role==='support'),
+  ];
 
   if(!allPeople.length){
     document.getElementById('staffBody').innerHTML=`<div style="text-align:center;padding:48px;color:var(--text3);font-size:13px">No team members yet. <span style="cursor:pointer;text-decoration:underline;color:var(--blue)" onclick="openPeople()">Add team →</span></div>`;
@@ -1769,7 +1786,7 @@ function renderStaffView(){
         <div style="width:20px;height:20px;border-radius:50%;background:${bg};color:${fg};font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${initials}</div>
         <span style="overflow:hidden;text-overflow:ellipsis">${person.name}</span>
       </div>
-      <div style="font-size:10px;color:var(--text3);margin-top:1px;padding-left:25px">${person.role==='lead'?'PLS':'Other'}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:1px;padding-left:25px">${roleLabel(person.role)}</div>
     </td>`;
 
     weekDates.forEach((d,i)=>{
