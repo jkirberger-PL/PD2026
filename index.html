@@ -134,7 +134,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .b-conf{background:var(--blue-bg);color:var(--blue)}
 .b-pend{background:var(--amber-bg);color:var(--amber)}
 .b-none{background:var(--surface2);color:var(--text3)}
-.b-done{background:#f0efe9;color:#6b6960;text-decoration:line-through}
+.b-core{background:#e8f4e8;color:#1a5c1a}
+.b-enrich{background:#f4e8f4;color:#5c1a5c}
+.b-both{background:#e8eef8;color:#1a3a6b}
 
 .av{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;border:1.5px solid var(--surface);flex-shrink:0;text-transform:uppercase}
 
@@ -415,6 +417,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <option value="">All types</option>
         <option>New school</option><option>Returning</option>
       </select>
+      <select id="fCurriculum" onchange="renderCards()">
+        <option value="">All curriculum</option>
+        <option>Core</option><option>Enrichment</option><option>Core + Enrichment</option>
+      </select>
       <select id="fPerson" onchange="renderCards()">
         <option value="">All team members</option>
       </select>
@@ -441,6 +447,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button onclick="calNav(1)"><svg viewBox="0 0 12 12"><polyline points="4,1 9,6 4,11"/></svg></button>
     </div>
     <button class="btn sm" onclick="calToday()">Today</button>
+    <select id="calFCurriculum" onchange="renderCal()" style="font-family:inherit;font-size:13px;padding:5px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);color:var(--text)">
+      <option value="">All curriculum</option>
+      <option>Core</option><option>Enrichment</option><option>Core + Enrichment</option>
+    </select>
     <div class="cal-mode-toggle">
       <button class="cal-mode-btn active" id="calModeMonth" onclick="setCalMode('month')">Month</button>
       <button class="cal-mode-btn" id="calModeWeek" onclick="setCalMode('week')">Week</button>
@@ -458,6 +468,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button onclick="staffNav(1)"><svg viewBox="0 0 12 12"><polyline points="4,1 9,6 4,11"/></svg></button>
     </div>
     <button class="btn sm" onclick="staffToday()">Today</button>
+    <select id="staffFCurriculum" onchange="renderStaffView()" style="font-family:inherit;font-size:13px;padding:5px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);color:var(--text)">
+      <option value="">All curriculum</option>
+      <option>Core</option><option>Enrichment</option><option>Core + Enrichment</option>
+    </select>
   </div>
   <div class="cal-body" id="staffBody"></div>
 </div>
@@ -487,6 +501,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="fg"><label>School type</label><select id="fSchoolType"><option>New school</option><option>Returning</option></select></div>
     </div>
     <div class="row2">
+      <div class="fg"><label>Curriculum</label><select id="fSchoolCurriculum"><option>Core</option><option>Enrichment</option><option>Core + Enrichment</option></select></div>
       <div class="fg"><label>School size</label><select id="fSchoolSize"><option>Small (1–5 teachers)</option><option>Medium (6–15 teachers)</option><option>Large (16+ teachers)</option></select></div>
       <div class="fg"><label>Notes</label><input id="fSchoolNotes" type="text" placeholder=""></div>
     </div>
@@ -585,6 +600,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
   <div class="m-foot">
+    <button class="btn danger" onclick="repairPeopleIds()" title="Fix duplicate ID issues">Repair IDs</button>
+    <div style="flex:1"></div>
     <button class="btn" onclick="closePeople()">Cancel</button>
     <button class="btn primary" onclick="savePeople()">Save team</button>
   </div>
@@ -702,11 +719,34 @@ function unpackState(data){
   if(!data) return;
   if(Array.isArray(data.schools) && data.schools.length) schools = data.schools;
   if(Array.isArray(data.sessions) && data.sessions.length) sessions = data.sessions;
-  if(Array.isArray(data.people) && data.people.length) people = data.people;
+  if(Array.isArray(data.people) && data.people.length){
+    people = data.people;
+    // Fix duplicate IDs — assign new unique IDs to any duplicates found
+    const seenIds = new Set();
+    let maxId = 0;
+    people.forEach(p=>{ p.id=parseInt(p.id)||0; maxId=Math.max(maxId,p.id); });
+    people.forEach(p=>{
+      if(seenIds.has(p.id)){
+        // Duplicate found — give this person a new unique ID
+        maxId++;
+        const oldId = p.id;
+        p.id = maxId;
+        // Update all session staff arrays that referenced the old ID
+        sessions.forEach(s=>{
+          if(!s.staff) return;
+          const idx = s.staff.indexOf(oldId);
+          // Only fix if this specific person wasn't already correctly mapped
+          // (can't distinguish which duplicate was intended, so skip session fix)
+        });
+      }
+      seenIds.add(p.id);
+    });
+    nextPersonId = Math.max(nextPersonId, maxId+1);
+  }
   if(data.meta){
     nextSchoolId = data.meta.nextSchoolId || nextSchoolId;
     nextSessionId = data.meta.nextSessionId || nextSessionId;
-    nextPersonId = data.meta.nextPersonId || nextPersonId;
+    nextPersonId = Math.max(data.meta.nextPersonId || 1, nextPersonId);
     if(data.meta.sharedCalId) sharedCalId = data.meta.sharedCalId;
   }
 }
@@ -824,6 +864,11 @@ function avById(id){ return av(people.find(p=>p.id===id)); }
 function leads(){ return people.filter(p=>p.role==='lead'); }
 function supports(){ return people.filter(p=>p.role==='support'); }
 
+function curricBadge(c){
+  if(!c) return '';
+  const m={'Core':'b-core','Enrichment':'b-enrich','Core + Enrichment':'b-both'};
+  return `<span class="badge ${m[c]||'b-none'}">${c}</span>`;
+}
 function sBadge(s){
   const m={Scheduled:'b-sched',Confirmed:'b-conf','Pending date':'b-pend','No date yet':'b-none',Completed:'b-done'};
   return `<span class="badge ${m[s]||'b-none'}">${s}</span>`;
@@ -868,10 +913,12 @@ function renderCards(){
   const fSt=document.getElementById('fStatus').value;
   const fM=document.getElementById('fMode').value;
   const fT=document.getElementById('fType').value;
+  const fC=document.getElementById('fCurriculum').value;
 
   let schoolList=schools.filter(sc=>{
     if(q&&!sc.name.toLowerCase().includes(q)) return false;
     if(fT&&sc.type!==fT) return false;
+    if(fC&&sc.curriculum!==fC) return false;
     // filter by session attributes
     const scSess=sessions.filter(se=>se.schoolId===sc.id);
     if(fSt&&!scSess.some(se=>se.status===fSt)) return false;
@@ -904,6 +951,7 @@ function renderCards(){
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
             <span class="badge ${sc.type==='New school'?'b-new':'b-ret'}">${sc.type==='New school'?'New':'Returning'}</span>
             ${sc.entity==='District'?`<span class="badge" style="background:#f0e8fc;color:#5a2d8f">District</span>`:''}
+            ${curricBadge(sc.curriculum)}
           </div>
           <div class="card-name">${sc.name}${sc.sheetUrl?` <a href="${sc.sheetUrl}" target="_blank" onclick="event.stopPropagation()" style="font-size:10px;font-weight:400;color:var(--blue);text-decoration:none;margin-left:4px" title="Open school spreadsheet">↗ Sheet</a>`:''}</div>
           <div class="card-summary">${sessCount===0?'No sessions yet':sessCount+' session'+(sessCount>1?'s':'')+(schedCount?' · '+schedCount+' scheduled':' · none scheduled')}${sc.notes?' · '+sc.notes:''}</div>
@@ -1116,8 +1164,10 @@ function assignRow(person, sess){
 function toggleStaff(personId){
   const sess=sessions.find(x=>x.id===activeSessionId); if(!sess)return;
   if(!sess.staff) sess.staff=[];
-  const idx=sess.staff.indexOf(personId);
-  if(idx>=0) sess.staff.splice(idx,1); else sess.staff.push(personId);
+  // Use strict number comparison to avoid string/number ID mismatches
+  const id = parseInt(personId);
+  const idx=sess.staff.findIndex(x=>parseInt(x)===id);
+  if(idx>=0) sess.staff.splice(idx,1); else sess.staff.push(id);
   persist(); renderAssign(sess); renderCards();
 }
 
@@ -1285,6 +1335,7 @@ function openAddSchool(){
   document.getElementById('schoolModalTitle').textContent='Add school';
   document.getElementById('fSchool').value='';
   document.getElementById('fSchoolEntity').value='Single school';
+  document.getElementById('fSchoolCurriculum').value='Core';
   document.getElementById('fSchoolType').value='New school';
   document.getElementById('fSchoolSize').value='Small (1–5 teachers)';
   document.getElementById('fSchoolNotes').value='';
@@ -1296,6 +1347,7 @@ function openEditSchool(id){
   document.getElementById('schoolModalTitle').textContent='Edit — '+sc.name;
   document.getElementById('fSchool').value=sc.name;
   document.getElementById('fSchoolEntity').value=sc.entity||'Single school';
+  document.getElementById('fSchoolCurriculum').value=sc.curriculum||'Core';
   document.getElementById('fSchoolType').value=sc.type;
   document.getElementById('fSchoolSize').value=sc.size;
   document.getElementById('fSchoolNotes').value=sc.notes||'';
@@ -1308,6 +1360,7 @@ function saveSchool(){
   const entry={
     id:editSchoolId||nextSchoolId++, name,
     entity:document.getElementById('fSchoolEntity').value,
+    curriculum:document.getElementById('fSchoolCurriculum').value,
     type:document.getElementById('fSchoolType').value,
     size:document.getElementById('fSchoolSize').value,
     notes:document.getElementById('fSchoolNotes').value.trim(),
@@ -1436,10 +1489,29 @@ function personRow(p){
     <button class="icon-btn" onclick="openEditPerson(${p.id})">${IC.edit}</button>
   </div>`;
 }
+function repairPeopleIds(){
+  if(!confirm('This will reassign all team member IDs to fix duplicates. Staff assignments on sessions will be cleared and you\'ll need to reassign them. Continue?')) return;
+  // Give everyone a fresh sequential ID
+  people.forEach((p,i)=>{ p.id = i+1; });
+  nextPersonId = people.length + 1;
+  // Clear all staff assignments since old IDs are now invalid
+  sessions.forEach(s=>{ s.staff=[]; });
+  persist(); renderPeopleList(); updateGcalStatus(); updatePersonFilter();
+  alert('Done! IDs repaired. Please re-assign staff to sessions.');
+}
+
+function addPerson(){
+  // Always compute from actual data to prevent collisions
+  const maxId = people.reduce((m,p)=>Math.max(m, parseInt(p.id)||0), 0);
+  return maxId + 1;
+}
+
 function addPerson(){
   const name=document.getElementById('newName').value.trim(); if(!name)return;
-  people.push({id:nextPersonId++,name,role:document.getElementById('newRole').value,calId:document.getElementById('newCal').value.trim(),color:COLOR_PAIRS[people.length%COLOR_PAIRS.length]});
-  document.getElementById('newName').value='';document.getElementById('newCal').value='';
+  const newId = getNextPersonId();
+  nextPersonId = newId + 1;
+  people.push({id:newId, name, role:document.getElementById('newRole').value, calId:document.getElementById('newCal').value.trim(), color:COLOR_PAIRS[(newId-1)%COLOR_PAIRS.length]});
+  document.getElementById('newName').value=''; document.getElementById('newCal').value='';
   persist(); renderPeopleList(); updateGcalStatus();
 }
 function savePeople(){
@@ -1530,10 +1602,11 @@ function parseDatesFromStr(str, yearHint){
 function dateKey(d){ return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
 
 // Build map: dateKey → [{session, school, dates[]}]
-function buildCalMap(){
+function buildCalMap(curricFilter=''){
   const map = {};
   sessions.forEach(sess=>{
     const school = schools.find(s=>s.id===sess.schoolId);
+    if(curricFilter && school?.curriculum !== curricFilter) return;
     const dates = parseDatesFromStr(sess.dates);
     dates.forEach(dt=>{
       const k=dateKey(dt);
@@ -1564,10 +1637,7 @@ function renderMonth(){
   const monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
   document.getElementById('calPeriodLabel').textContent=`${monthNames[m]} ${y}`;
 
-  const map=buildCalMap();
-  const today=new Date(); const todayKey=dateKey(today);
-
-  // First day of month, padding
+  const map=buildCalMap(document.getElementById('calFCurriculum')?.value||'');
   const firstDay=new Date(y,m,1).getDay(); // 0=Sun
   const daysInMonth=new Date(y,m+1,0).getDate();
   const startPad=firstDay; // Sun-start grid
@@ -1629,9 +1699,8 @@ function renderWeekCal(){
   const label=`${monthNames[weekDates[0].getMonth()]} ${weekDates[0].getDate()} – ${monthNames[weekDates[6].getMonth()]} ${weekDates[6].getDate()}, ${weekDates[6].getFullYear()}`;
   document.getElementById('calPeriodLabel').textContent=label;
 
-  const map=buildCalMap();
+  const map=buildCalMap(document.getElementById('calFCurriculum')?.value||'');
   const today=new Date(); const todayKey=dateKey(today);
-  const dowNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
   // Header
   let html=`<div class="week-cal">`;
@@ -1760,6 +1829,9 @@ function buildStaffMap(weekDates){
 
   sessions.forEach(sess=>{
     const school=schools.find(s=>s.id===sess.schoolId);
+    // Apply curriculum filter if set
+    const fC=(document.getElementById('staffFCurriculum')?.value||'');
+    if(fC && school?.curriculum !== fC) return;
     const dates=parseDatesFromStr(sess.dates);
     dates.forEach(dt=>{
       // Session day(s) — for multi-day sessions just mark the one date
