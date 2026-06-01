@@ -1638,6 +1638,7 @@ function renderMonth(){
   document.getElementById('calPeriodLabel').textContent=`${monthNames[m]} ${y}`;
 
   const map=buildCalMap(document.getElementById('calFCurriculum')?.value||'');
+  const today=new Date(); const todayKey=dateKey(today);
   const firstDay=new Date(y,m,1).getDay(); // 0=Sun
   const daysInMonth=new Date(y,m+1,0).getDate();
   const startPad=firstDay; // Sun-start grid
