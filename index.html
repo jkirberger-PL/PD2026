@@ -559,6 +559,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
         <input type="checkbox" id="fTravelAfter" style="width:auto"> Travel day after session</label>
     </div>
+    <div class="fg"><label>Session notes doc <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text3)">(link to Google Doc, Notion, etc.)</span></label>
+      <input id="fSesMeetingLink" type="text" placeholder="https://docs.google.com/..."></div>
     <div class="fg"><label>Notes</label><textarea id="fSesNotes" placeholder="Any details for this session…"></textarea></div>
   </div>
   <div class="m-foot">
@@ -972,7 +974,7 @@ function renderCards(){
           return `
         <div class="session-row${se.id===activeSessionId?' active-session':''}" onclick="selectSession(${se.id})">
           <div class="session-info">
-            <div class="session-title">${se.label||'Session'}</div>
+            <div class="session-title">${se.label||'Session'}${se.meetingLink?` <a href="${se.meetingLink}" target="_blank" onclick="event.stopPropagation()" style="font-size:10px;font-weight:400;color:var(--blue);text-decoration:none;margin-left:4px" title="Open session notes">↗ Notes</a>`:''}</div>
             <div class="session-meta">
               ${modeBadge(se.mode)}
               <span>${se.len}</span>
@@ -1398,6 +1400,7 @@ function openAddSession(schoolId){
   document.getElementById('fSesTz').value='';
   document.getElementById('fSesStat').value='No date yet';
   document.getElementById('fSesNotes').value='';
+  document.getElementById('fSesMeetingLink').value='';
   document.getElementById('fTravelBefore').checked=false;
   document.getElementById('fTravelAfter').checked=false;
   document.getElementById('travelDaySection').style.display='none';
@@ -1414,6 +1417,7 @@ function openEditSession(id){
   document.getElementById('fSesTz').value=se.timezone||'';
   document.getElementById('fSesStat').value=se.status;
   document.getElementById('fSesNotes').value=se.notes||'';
+  document.getElementById('fSesMeetingLink').value=se.meetingLink||'';
   document.getElementById('fTravelBefore').checked=!!se.travelBefore;
   document.getElementById('fTravelAfter').checked=!!se.travelAfter;
   document.getElementById('travelDaySection').style.display=se.mode==='In-person'?'block':'none';
@@ -1440,6 +1444,7 @@ function saveSession(){
     travelBefore:document.getElementById('fSesMode').value==='In-person'&&document.getElementById('fTravelBefore').checked,
     travelAfter:document.getElementById('fSesMode').value==='In-person'&&document.getElementById('fTravelAfter').checked,
     notes:document.getElementById('fSesNotes').value.trim(),
+    meetingLink:document.getElementById('fSesMeetingLink').value.trim(),
     staff:editSessionId?sessions.find(x=>x.id===editSessionId).staff||[]:[],
   };
   if(editSessionId) sessions=sessions.map(x=>x.id===editSessionId?entry:x);
@@ -1586,15 +1591,38 @@ function calToday(){ calDate = new Date(); renderCal(); }
 function parseDatesFromStr(str, yearHint){
   if(!str) return [];
   const mo={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
-  const year = yearHint || new Date().getFullYear();
+  const now=new Date();
+  const currentYear=now.getFullYear();
   return str.split(',').map(s=>{
-    s = s.trim().toLowerCase();
-    const parts = s.split(/[\s\/\-]+/);
+    s=s.trim().toLowerCase();
+    const parts=s.split(/[\s\/\-]+/);
     if(parts.length>=2){
-      const m=mo[parts[0].slice(0,3)];
-      const d=parseInt(parts[1]);
-      if(m!==undefined && d) return new Date(year,m,d);
+      // Check if an explicit year is included (4-digit number)
+      let month, day, year;
+      // Format: "Apr 12 2027" or "Apr 12, 2027"
+      const yearPart=parts.find(p=>/^\d{4}$/.test(p));
+      if(yearPart){
+        year=parseInt(yearPart);
+        const nonYear=parts.filter(p=>p!==yearPart);
+        month=mo[nonYear[0]?.slice(0,3)];
+        day=parseInt(nonYear[1]);
+      } else {
+        month=mo[parts[0].slice(0,3)];
+        day=parseInt(parts[1]);
+        // Smart year: use yearHint if given, otherwise pick whichever
+        // year (current or next) puts this date closest in the future
+        if(yearHint){
+          year=yearHint;
+        } else {
+          const thisYear=new Date(currentYear,month,day);
+          const nextYear=new Date(currentYear+1,month,day);
+          // If date already passed by more than 60 days, use next year
+          year=(now-thisYear>60*24*3600*1000)?currentYear+1:currentYear;
+        }
+      }
+      if(month!==undefined&&day) return new Date(year,month,day);
     }
+    // Try native parse as fallback (handles "2027-04-12" etc.)
     const dt=new Date(s); return isNaN(dt)?null:dt;
   }).filter(Boolean);
 }
@@ -1795,6 +1823,7 @@ function openSesDetail(event, sessId){
     ${sess.startTime?`<div class="ses-pop-row"><strong>School time</strong>${sess.startTime} ${tzLabels[sess.timezone]||sess.timezone||''}</div>`:''}
     ${viewerTime?`<div class="ses-pop-row"><strong>Your time</strong>${viewerTime}</div>`:''}
     ${staffNames?`<div class="ses-pop-row"><strong>Staff</strong>${staffNames}</div>`:''}
+    ${sess.meetingLink?`<div class="ses-pop-row"><strong>Notes doc</strong><a href="${sess.meetingLink}" target="_blank" style="color:var(--blue)">↗ Open notes</a></div>`:''}
     ${sess.notes?`<div class="ses-pop-row"><strong>Notes</strong>${sess.notes}</div>`:''}
   `;
   document.getElementById('popEditBtn').style.display=isAdmin()?'':'none';
