@@ -896,13 +896,17 @@ function updatePersonFilter(){
 
 // ── Stats ─────────────────────────────────────────────────
 function updateStats(){
-  const total=schools.length;
+  const core=schools.filter(x=>x.curriculum==='Core').length;
+  const enrich=schools.filter(x=>x.curriculum==='Enrichment').length;
+  const both=schools.filter(x=>x.curriculum==='Core + Enrichment').length;
   const allSess=sessions.length;
   const sched=sessions.filter(x=>x.status==='Scheduled'||x.status==='Confirmed').length;
   const pend=sessions.filter(x=>x.status==='Pending date'||x.status==='No date yet').length;
   const travel=sessions.filter(x=>x.mode==='In-person').length;
   document.getElementById('statsBar').innerHTML=`
-    <div class="si"><div class="si-n">${total}</div><div class="si-l">Schools</div></div>
+    <div class="si"><div class="si-n" style="color:#1a5c1a">${core}</div><div class="si-l">Core</div></div>
+    <div class="si"><div class="si-n" style="color:#5c1a5c">${enrich}</div><div class="si-l">Enrichment</div></div>
+    ${both?`<div class="si"><div class="si-n" style="color:#1a3a6b">${both}</div><div class="si-l">Core + Enrich</div></div>`:''}
     <div class="si"><div class="si-n">${allSess}</div><div class="si-l">Total sessions</div></div>
     <div class="si"><div class="si-n" style="color:#1a4d8f">${sched}</div><div class="si-l">Scheduled</div></div>
     <div class="si"><div class="si-n" style="color:#8f5a00">${pend}</div><div class="si-l">Pending</div></div>
@@ -1757,6 +1761,7 @@ function renderWeekCal(){
 
   const map=buildCalMap(document.getElementById('calFCurriculum')?.value||'');
   const today=new Date(); const todayKey=dateKey(today);
+  const dowNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
   // Header
   let html=`<div class="cal-scroll-wrap"><div class="week-cal">`;
