@@ -1763,44 +1763,49 @@ function renderWeekCal(){
   const today=new Date(); const todayKey=dateKey(today);
   const dowNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
-  // Header
-  let html=`<div class="cal-scroll-wrap"><div class="week-cal">`;
-  html+=`<div class="week-cal-hdr"><div></div>`;
-  weekDates.forEach((dt,i)=>{
-    const isT=dateKey(dt)===todayKey;
-    html+=`<div class="week-col-hdr${isT?' today-hdr':''}">
-      <span style="font-size:10px;text-transform:uppercase;letter-spacing:.04em">${dowNames[i]}</span><br>
-      <span class="wk-big">${isT?`<span class="wk-big">${dt.getDate()}</span>`:dt.getDate()}</span>
-    </div>`;
-  });
-  html+=`</div>`;
-
-  // All-day row for sessions
-  html+=`<div style="display:grid;grid-template-columns:52px repeat(7,1fr);border:1px solid var(--border);border-bottom:none;border-radius:14px 14px 0 0;overflow:hidden">`;
-  html+=`<div style="background:var(--surface2);border-right:1px solid var(--border);padding:4px 6px;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;justify-content:flex-end">Sessions</div>`;
-  weekDates.forEach(dt=>{
-    const k=dateKey(dt);
-    const entries=map[k]||[];
-    const isT=dateKey(dt)===todayKey;
-    html+=`<div class="week-allday${isT?' today-col':''}">`;
-    entries.forEach(e=>{
-      if(e.isTravel){
-        const staffPpl=(e.sess.staff||[]).map(id=>people.find(p=>p.id===id)).filter(Boolean);
-        const avsHtml=staffPpl.map(p=>{const [bg,fg]=p.color||COLOR_PAIRS[0];const ini=p.name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();return `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${bg};color:${fg};font-size:7px;font-weight:700;flex-shrink:0;border:1px solid #fff">${ini}</span>`;}).join('');
-        html+=`<div class="cal-chip travel-chip" onclick="openSesDetail(event,${e.sess.id})" style="font-size:10px"><div style="display:flex;align-items:center;gap:3px;overflow:hidden"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">✈ ${e.school?.name||'?'}</span>${avsHtml?`<span style="display:flex;gap:1px;flex-shrink:0">${avsHtml}</span>`:''}</div></div>`;
-        return;
-      }
-      const staffPpl=(e.sess.staff||[]).map(id=>people.find(p=>p.id===id)).filter(Boolean);
-      const avsHtml=staffPpl.map(p=>{const [bg,fg]=p.color||COLOR_PAIRS[0];const ini=p.name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();return `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${bg};color:${fg};font-size:7px;font-weight:700;flex-shrink:0;border:1px solid #fff">${ini}</span>`;}).join('');
-      const ptTime=fmtSessionTime(e.sess, e.dt);
-      html+=`<div class="cal-chip ${chipClass(e.sess,e.school)}" onclick="openSesDetail(event,${e.sess.id})" style="font-size:10px"><div style="display:flex;align-items:center;gap:3px;overflow:hidden"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${ptTime?`<strong>${ptTime}</strong> `:''}${e.school?.name||'?'} — ${e.sess.label||'Session'}</span>${avsHtml?`<span style="display:flex;gap:1px;flex-shrink:0">${avsHtml}</span>`:''}</div></div>`;
-    });
-    if(!entries.length) html+=`<span style="font-size:10px;color:var(--text3);padding:2px 4px;display:block">—</span>`;
-    html+=`</div>`;
-  });
-  html+=`</div>`;
-  html+=`</div>`; // end week-cal
-  html+=`</div>`; // end cal-scroll-wrap
+  // Build as a single table so header and data columns always align
+  let html=`<div style="overflow-x:auto">
+  <table style="width:100%;min-width:560px;border-collapse:collapse;table-layout:fixed">
+    <colgroup>
+      <col style="width:64px">
+      ${weekDates.map(()=>`<col>`).join('')}
+    </colgroup>
+    <thead>
+      <tr>
+        <th style="background:var(--surface2);border:1px solid var(--border);padding:6px 4px;font-size:10px;color:var(--text3)"></th>
+        ${weekDates.map((dt,i)=>{
+          const isT=dateKey(dt)===todayKey;
+          return `<th style="background:${isT?'var(--blue-bg)':'var(--surface2)'};border:1px solid var(--border);padding:6px 4px;text-align:center;font-size:11px;color:${isT?'var(--blue)':'var(--text2)'};font-weight:${isT?700:500}">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;opacity:.7">${dowNames[i]}</div>
+            <div style="font-size:16px;font-weight:600">${dt.getDate()}</div>
+          </th>`;
+        }).join('')}
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="background:var(--surface2);border:1px solid var(--border);padding:4px 6px;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;vertical-align:middle;text-align:right">Sessions</td>
+        ${weekDates.map(dt=>{
+          const k=dateKey(dt);
+          const entries=map[k]||[];
+          const isT=dateKey(dt)===todayKey;
+          let cells='';
+          entries.forEach(e=>{
+            const staffPpl=(e.sess.staff||[]).map(id=>people.find(p=>p.id===id)).filter(Boolean);
+            const avsHtml=staffPpl.map(p=>{const [bg,fg]=p.color||COLOR_PAIRS[0];const ini=p.name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();return `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${bg};color:${fg};font-size:7px;font-weight:700;flex-shrink:0;border:1.5px solid #fff">${ini}</span>`;}).join('');
+            if(e.isTravel){
+              cells+=`<div class="cal-chip travel-chip" onclick="openSesDetail(event,${e.sess.id})" style="font-size:10px"><div style="display:flex;align-items:center;gap:3px;overflow:hidden"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">✈ ${e.school?.name||'?'}</span>${avsHtml?`<span style="display:flex;gap:1px;flex-shrink:0">${avsHtml}</span>`:''}</div></div>`;
+            } else {
+              const ptTime=fmtSessionTime(e.sess, e.dt);
+              cells+=`<div class="cal-chip ${chipClass(e.sess,e.school)}" onclick="openSesDetail(event,${e.sess.id})" style="font-size:10px"><div style="display:flex;align-items:center;gap:3px;overflow:hidden"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${ptTime?`<strong>${ptTime}</strong> `:''}${e.school?.name||'?'} — ${e.sess.label||'Session'}</span>${avsHtml?`<span style="display:flex;gap:1px;flex-shrink:0">${avsHtml}</span>`:''}</div></div>`;
+            }
+          });
+          if(!entries.length) cells=`<span style="font-size:10px;color:var(--text3);padding:2px 4px;display:block">—</span>`;
+          return `<td style="border:1px solid var(--border);padding:3px 4px;vertical-align:top;background:${isT?'#fafbff':'var(--surface)'};min-height:60px">${cells}</td>`;
+        }).join('')}
+      </tr>
+    </tbody>
+  </table></div>`;
   html+=`<div style="display:flex;gap:12px;padding:10px 0 4px;font-size:11px;color:var(--text3);flex-wrap:wrap">
     <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#e8f4e8;border:1px solid #1a5c1a"></span> Core</span>
     <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#f4e8f4;border:1px solid #5c1a5c"></span> Enrichment</span>
