@@ -255,10 +255,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .cal-mode-btn:hover{background:var(--surface2)}
 .cal-mode-btn.active{background:var(--text);color:var(--bg)}
 
-.cal-body{flex:1;overflow-y:auto;padding:16px 20px;min-height:0}
+.cal-body{flex:1;overflow-y:auto;overflow-x:auto;padding:16px 20px;min-height:0}
+.cal-scroll-wrap{min-width:700px}
 
 /* Month grid */
-.month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden}
+.month-grid{display:grid;grid-template-columns:repeat(7,minmax(100px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;min-width:600px}
 .month-dow{background:var(--surface2);padding:6px 8px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;text-align:center}
 .month-cell{background:var(--surface);min-height:90px;padding:6px 7px;vertical-align:top;position:relative}
 .month-cell.other-month{background:var(--surface2)}
@@ -266,18 +267,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .month-day-num{font-size:12px;font-weight:500;margin-bottom:4px;color:var(--text2);display:inline-block;width:20px;height:20px;line-height:20px;text-align:center}
 .cal-chip{font-size:10px;border-radius:4px;padding:2px 5px;margin-bottom:2px;cursor:pointer;line-height:1.4;display:block;width:100%;overflow:hidden}
 .cal-chip:hover{filter:brightness(.93)}
-.cal-chip.virt{background:var(--purple-bg);color:var(--purple)}
-.cal-chip.inp{background:var(--amber-bg);color:var(--amber)}
-.cal-chip.sched{background:var(--green-bg);color:var(--green)}
-.cal-chip.conf{background:var(--blue-bg);color:var(--blue)}
-.cal-chip.pend{background:#fff8e8;color:#7a4a00}
-.cal-chip.none{background:var(--surface2);color:var(--text3)}
+.cal-chip.curric-core{background:#e8f4e8;color:#1a5c1a}
+.cal-chip.curric-enrich{background:#f4e8f4;color:#5c1a5c}
+.cal-chip.curric-both{background:#e8eef8;color:#1a3a6b}
+.cal-chip.curric-none{background:var(--surface2);color:var(--text3)}
+.cal-chip.travel-chip{background:#fdf0d8;color:#8f5a00;border:1px dashed #e0c070}
 .more-chip{font-size:10px;color:var(--text3);cursor:pointer;padding:1px 4px}
 .more-chip:hover{color:var(--blue)}
 
 /* Week grid */
-.week-cal{width:100%}
-.week-cal-hdr{display:grid;grid-template-columns:52px repeat(7,1fr);border-bottom:1px solid var(--border);margin-bottom:0}
+.week-cal{width:100%;min-width:560px}
+.week-cal-hdr{display:grid;grid-template-columns:52px repeat(7,1fr);border-bottom:1px solid var(--border);margin-bottom:0;min-width:560px}
 .week-col-hdr{padding:6px 4px;text-align:center;font-size:11px;color:var(--text3);font-weight:500}
 .week-col-hdr.today-hdr{color:var(--blue);font-weight:600}
 .week-col-hdr .wk-big{font-size:18px;font-weight:600;display:block;line-height:1.1}
@@ -1639,19 +1639,30 @@ function buildCalMap(curricFilter=''){
     dates.forEach(dt=>{
       const k=dateKey(dt);
       if(!map[k]) map[k]=[];
-      map[k].push({sess, school, dt});
+      map[k].push({sess, school, dt, isTravel:false});
+      // Add travel days
+      const staffPpl=(sess.staff||[]).map(id=>people.find(p=>p.id===id)).filter(Boolean);
+      if(sess.travelBefore){
+        const tb=addDays(dt,-1); const tbk=dateKey(tb);
+        if(!map[tbk]) map[tbk]=[];
+        map[tbk].push({sess, school, dt:tb, isTravel:true, travelLabel:'(travel)', staffPpl});
+      }
+      if(sess.travelAfter){
+        const ta=addDays(dt,1); const tak=dateKey(ta);
+        if(!map[tak]) map[tak]=[];
+        map[tak].push({sess, school, dt:ta, isTravel:true, travelLabel:'(travel)', staffPpl});
+      }
     });
   });
   return map;
 }
 
-function chipClass(sess){
-  if(sess.status==='Confirmed') return 'conf';
-  if(sess.status==='Scheduled') return 'sched';
-  if(sess.status==='Pending date') return 'pend';
-  if(sess.mode==='In-person') return 'inp';
-  if(sess.mode==='Virtual') return 'virt';
-  return 'none';
+function chipClass(sess, school){
+  const c=school?.curriculum||'';
+  if(c==='Core') return 'curric-core';
+  if(c==='Enrichment') return 'curric-enrich';
+  if(c==='Core + Enrichment') return 'curric-both';
+  return 'curric-none';
 }
 
 // ── Month render ──────────────────────────────────────────
@@ -1672,7 +1683,7 @@ function renderMonth(){
   const startPad=firstDay; // Sun-start grid
 
   const dowLabels=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  let html=`<div class="month-grid">`;
+  let html=`<div class="cal-scroll-wrap"><div class="month-grid">`;
   html+=dowLabels.map(d=>`<div class="month-dow">${d}</div>`).join('');
 
   // Prev month padding
@@ -1692,10 +1703,20 @@ function renderMonth(){
     html+=`<div class="month-cell${isToday?' today':''}">
       <span class="month-day-num">${d}</span>
       ${show.map(e=>{
+        if(e.isTravel){
+          const staffPpl=(e.sess.staff||[]).map(id=>people.find(p=>p.id===id)).filter(Boolean);
+          const avsHtml=staffPpl.map(p=>{const [bg,fg]=p.color||COLOR_PAIRS[0];const ini=p.name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();return `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${bg};color:${fg};font-size:7px;font-weight:700;flex-shrink:0;border:1px solid #fff">${ini}</span>`;}).join('');
+          return `<div class="cal-chip travel-chip" onclick="openSesDetail(event,${e.sess.id})" title="${e.school?.name||''}: Travel day">
+            <div style="display:flex;align-items:center;gap:3px;overflow:hidden">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">✈ ${e.school?.name||'?'}</span>
+              ${avsHtml?`<span style="display:flex;gap:1px;flex-shrink:0">${avsHtml}</span>`:''}
+            </div>
+          </div>`;
+        }
         const staffPpl=(e.sess.staff||[]).map(id=>people.find(p=>p.id===id)).filter(Boolean);
         const avsHtml=staffPpl.map(p=>{const [bg,fg]=p.color||COLOR_PAIRS[0];const ini=p.name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();return `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${bg};color:${fg};font-size:7px;font-weight:700;flex-shrink:0;border:1px solid #fff">${ini}</span>`;}).join('');
         const ptTime=fmtSessionTime(e.sess, e.dt);
-        return `<div class="cal-chip ${chipClass(e.sess)}" onclick="openSesDetail(event,${e.sess.id})" title="${e.school?.name||''}: ${e.sess.label||'Session'}">
+        return `<div class="cal-chip ${chipClass(e.sess,e.school)}" onclick="openSesDetail(event,${e.sess.id})" title="${e.school?.name||''}: ${e.sess.label||'Session'}">
           <div style="display:flex;align-items:center;gap:3px;overflow:hidden">
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${ptTime?`<strong>${ptTime}</strong> `:''} ${e.school?.name||'?'} — ${e.sess.label||'Session'}</span>
             ${avsHtml?`<span style="display:flex;gap:1px;flex-shrink:0">${avsHtml}</span>`:''}
@@ -1712,7 +1733,13 @@ function renderMonth(){
   for(let i=1;i<=endPad;i++){
     html+=`<div class="month-cell other-month"><span class="month-day-num" style="color:var(--text3)">${i}</span></div>`;
   }
-  html+=`</div>`;
+  html+=`</div></div>`; // close month-grid and cal-scroll-wrap
+  html+=`<div style="display:flex;gap:12px;padding:10px 0 4px;font-size:11px;color:var(--text3);flex-wrap:wrap">
+    <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#e8f4e8;border:1px solid #1a5c1a"></span> Core</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#f4e8f4;border:1px solid #5c1a5c"></span> Enrichment</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#e8eef8;border:1px solid #1a3a6b"></span> Core + Enrichment</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#fdf0d8;border:1px dashed #e0c070"></span> ✈ Travel day</span>
+  </div>`;
   document.getElementById('calBody').innerHTML=html;
 }
 
@@ -1732,7 +1759,7 @@ function renderWeekCal(){
   const today=new Date(); const todayKey=dateKey(today);
 
   // Header
-  let html=`<div class="week-cal">`;
+  let html=`<div class="cal-scroll-wrap"><div class="week-cal">`;
   html+=`<div class="week-cal-hdr"><div></div>`;
   weekDates.forEach((dt,i)=>{
     const isT=dateKey(dt)===todayKey;
@@ -1752,16 +1779,29 @@ function renderWeekCal(){
     const isT=dateKey(dt)===todayKey;
     html+=`<div class="week-allday${isT?' today-col':''}">`;
     entries.forEach(e=>{
+      if(e.isTravel){
+        const staffPpl=(e.sess.staff||[]).map(id=>people.find(p=>p.id===id)).filter(Boolean);
+        const avsHtml=staffPpl.map(p=>{const [bg,fg]=p.color||COLOR_PAIRS[0];const ini=p.name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();return `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${bg};color:${fg};font-size:7px;font-weight:700;flex-shrink:0;border:1px solid #fff">${ini}</span>`;}).join('');
+        html+=`<div class="cal-chip travel-chip" onclick="openSesDetail(event,${e.sess.id})" style="font-size:10px"><div style="display:flex;align-items:center;gap:3px;overflow:hidden"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">✈ ${e.school?.name||'?'}</span>${avsHtml?`<span style="display:flex;gap:1px;flex-shrink:0">${avsHtml}</span>`:''}</div></div>`;
+        return;
+      }
       const staffPpl=(e.sess.staff||[]).map(id=>people.find(p=>p.id===id)).filter(Boolean);
       const avsHtml=staffPpl.map(p=>{const [bg,fg]=p.color||COLOR_PAIRS[0];const ini=p.name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();return `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${bg};color:${fg};font-size:7px;font-weight:700;flex-shrink:0;border:1px solid #fff">${ini}</span>`;}).join('');
       const ptTime=fmtSessionTime(e.sess, e.dt);
-      html+=`<div class="cal-chip ${chipClass(e.sess)}" onclick="openSesDetail(event,${e.sess.id})" style="font-size:10px"><div style="display:flex;align-items:center;gap:3px;overflow:hidden"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${ptTime?`<strong>${ptTime}</strong> `:''}${e.school?.name||'?'} — ${e.sess.label||'Session'}</span>${avsHtml?`<span style="display:flex;gap:1px;flex-shrink:0">${avsHtml}</span>`:''}</div></div>`;
+      html+=`<div class="cal-chip ${chipClass(e.sess,e.school)}" onclick="openSesDetail(event,${e.sess.id})" style="font-size:10px"><div style="display:flex;align-items:center;gap:3px;overflow:hidden"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${ptTime?`<strong>${ptTime}</strong> `:''}${e.school?.name||'?'} — ${e.sess.label||'Session'}</span>${avsHtml?`<span style="display:flex;gap:1px;flex-shrink:0">${avsHtml}</span>`:''}</div></div>`;
     });
     if(!entries.length) html+=`<span style="font-size:10px;color:var(--text3);padding:2px 4px;display:block">—</span>`;
     html+=`</div>`;
   });
   html+=`</div>`;
   html+=`</div>`; // end week-cal
+  html+=`</div>`; // end cal-scroll-wrap
+  html+=`<div style="display:flex;gap:12px;padding:10px 0 4px;font-size:11px;color:var(--text3);flex-wrap:wrap">
+    <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#e8f4e8;border:1px solid #1a5c1a"></span> Core</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#f4e8f4;border:1px solid #5c1a5c"></span> Enrichment</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#e8eef8;border:1px solid #1a3a6b"></span> Core + Enrichment</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#fdf0d8;border:1px dashed #e0c070"></span> ✈ Travel day</span>
+  </div>`;
 
   document.getElementById('calBody').innerHTML=html;
 }
