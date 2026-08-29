@@ -564,8 +564,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="fg"><label>Length</label><select id="fSesLen"><option>Full day (8 hrs)</option><option>Full day (6 hrs)</option><option>Half day (4 hrs)</option><option>Half day (3 hrs)</option><option>2 hours</option><option>1.5 hours</option><option>1 hour</option><option>30 minutes</option></select></div>
     </div>
     <div class="fg">
-      <label>Proposed dates <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text3)">(comma-separated, e.g. Aug 12, Aug 19)</span></label>
-      <input id="fSesDates" type="text" placeholder="Aug 12, Aug 19">
+      <label>Proposed dates <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text3)">(comma-separated — include year if not current, e.g. May 15, 2026 or Aug 12)</span></label>
+      <input id="fSesDates" type="text" placeholder="Aug 12, Aug 19  or  May 15, 2026">
     </div>
     <div class="row2">
       <div class="fg"><label>Start time <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text3)">(local to school)</span></label>
@@ -1124,7 +1124,7 @@ function renderSide(){
 
   ${isAdmin()?`<div class="sp-sec">
     <div class="sp-sec-title">Proposed dates</div>
-    <input id="datesInput" type="text" value="${sess.dates||''}" placeholder="Aug 12, Aug 19…"
+    <input id="datesInput" type="text" value="${sess.dates||''}" placeholder="Aug 12, Aug 19  or  May 15, 2026"
       style="width:100%;font-family:inherit;font-size:13px;padding:6px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);color:var(--text);margin-bottom:8px">
     <button class="btn sm primary" onclick="saveDates()">${IC.check} Save dates</button>
   </div>`:''}
