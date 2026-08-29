@@ -500,16 +500,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <!-- Reports view -->
 <div class="cal-view" id="reportView">
-  <div class="cal-toolbar" style="flex-wrap:wrap;gap:8px">
+  <div class="cal-toolbar">
     <span style="font-size:13px;font-weight:500;color:var(--text)">Reports & Analytics</span>
-    <div style="margin-left:auto;display:flex;gap:8px">
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
       <select id="reportCurricFilter" onchange="renderReport()" style="font-family:inherit;font-size:13px;padding:5px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);color:var(--text)">
         <option value="">All curriculum</option>
         <option>Core</option><option>Enrichment</option><option>Core + Enrichment</option>
-      </select>
-      <select id="reportStatusFilter" onchange="renderReport()" style="font-family:inherit;font-size:13px;padding:5px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);color:var(--text)">
-        <option value="">All statuses</option>
-        <option>Completed</option><option>Confirmed</option><option>Scheduled</option><option>Pending date</option><option>No date yet</option>
       </select>
     </div>
   </div>
@@ -2083,50 +2079,46 @@ function renderStaffView(){
 // ── Reports view ──────────────────────────────────────────
 function renderReport(){
   const curricF = document.getElementById('reportCurricFilter')?.value||'';
-  const statusF = document.getElementById('reportStatusFilter')?.value||'';
 
-  // Apply filters
   const filteredSchools = schools.filter(s=> !curricF || s.curriculum===curricF);
   const schoolIds = new Set(filteredSchools.map(s=>s.id));
-  const filteredSess = sessions.filter(se=>
-    schoolIds.has(se.schoolId) && (!statusF || se.status===statusF)
-  );
+  const filteredSess = sessions.filter(se=> schoolIds.has(se.schoolId));
   const completedSess = filteredSess.filter(s=>s.status==='Completed');
 
-  // ── Helpers ──
   function durMins(len){
     return {'Full day (8 hrs)':480,'Full day (6 hrs)':360,'Half day (4 hrs)':240,'Half day (3 hrs)':180,'2 hours':120,'1.5 hours':90,'1 hour':60,'30 minutes':30}[len]||60;
   }
-  function fmtHrs(mins){ return mins>=60?`${(mins/60).toFixed(1)}h`:`${mins}m`; }
+  function fmtHrs(mins){
+    if(mins===0) return '0h';
+    return mins>=60?`${(mins/60).toFixed(1)}h`:`${mins}m`;
+  }
   function pct(a,b){ return b?Math.round(a/b*100):0; }
 
-  // ── Core metrics ──
+  // Core metrics
   const coreSchools=filteredSchools.filter(s=>s.curriculum==='Core').length;
   const enrichSchools=filteredSchools.filter(s=>s.curriculum==='Enrichment').length;
   const bothSchools=filteredSchools.filter(s=>s.curriculum==='Core + Enrichment').length;
   const coreSess=filteredSess.filter(se=>filteredSchools.find(s=>s.id===se.schoolId)?.curriculum==='Core');
   const enrichSess=filteredSess.filter(se=>filteredSchools.find(s=>s.id===se.schoolId)?.curriculum==='Enrichment');
   const bothSess=filteredSess.filter(se=>filteredSchools.find(s=>s.id===se.schoolId)?.curriculum==='Core + Enrichment');
-  const coreCompleted=coreSess.filter(s=>s.status==='Completed').length;
-  const enrichCompleted=enrichSess.filter(s=>s.status==='Completed').length;
   const totalMins=completedSess.reduce((s,se)=>s+durMins(se.len),0);
   const virtualCount=filteredSess.filter(s=>s.mode==='Virtual').length;
   const inPersonCount=filteredSess.filter(s=>s.mode==='In-person').length;
-  const noSessionSchools=filteredSchools.filter(s=>!sessions.some(se=>se.schoolId===s.id)).length;
-  const completionRate=pct(completedSess.length, filteredSess.length);
 
-  // ── Session type breakdown (by label) ──
+  // Unscheduled schools
+  const unscheduledSchools=filteredSchools.filter(sc=>!sessions.some(se=>se.schoolId===sc.id));
+
+  // Session type breakdown
   const labelMap={};
   filteredSess.forEach(se=>{
     const lbl=se.label||'Untitled';
     if(!labelMap[lbl]) labelMap[lbl]={total:0,completed:0,mins:0};
     labelMap[lbl].total++;
-    if(se.status==='Completed') labelMap[lbl].completed++;
-    if(se.status==='Completed') labelMap[lbl].mins+=durMins(se.len);
+    if(se.status==='Completed'){labelMap[lbl].completed++;labelMap[lbl].mins+=durMins(se.len);}
   });
   const labelRows=Object.entries(labelMap).sort((a,b)=>b[1].total-a[1].total);
 
-  // ── Staff time breakdown ──
+  // Staff time
   const staffTime={};
   completedSess.forEach(se=>{
     (se.staff||[]).forEach(id=>{
@@ -2139,85 +2131,153 @@ function renderReport(){
   const staffRows=Object.values(staffTime).sort((a,b)=>b.mins-a.mins);
   const maxMins=staffRows.length?staffRows[0].mins:1;
 
-  // ── School completion breakdown ──
+  // Monthly breakdown — sessions completed and hours by month
+  const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthMap={};
+  completedSess.forEach(se=>{
+    const dates=parseDatesFromStr(se.dates);
+    if(!dates.length) return;
+    const d=dates[0];
+    const key=`${d.getFullYear()}-${String(d.getMonth()).padStart(2,'0')}`;
+    const label=`${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+    if(!monthMap[key]) monthMap[key]={label,sessions:0,mins:0,virtual:0,inPerson:0};
+    monthMap[key].sessions++;
+    monthMap[key].mins+=durMins(se.len);
+    if(se.mode==='Virtual') monthMap[key].virtual++;
+    else monthMap[key].inPerson++;
+  });
+  // Also include upcoming scheduled sessions
+  const upcomingMap={};
+  filteredSess.filter(s=>s.status==='Scheduled'||s.status==='Confirmed').forEach(se=>{
+    const dates=parseDatesFromStr(se.dates);
+    if(!dates.length) return;
+    const d=dates[0];
+    const key=`${d.getFullYear()}-${String(d.getMonth()).padStart(2,'0')}`;
+    const label=`${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+    if(!upcomingMap[key]) upcomingMap[key]={label,sessions:0,mins:0};
+    upcomingMap[key].sessions++;
+    upcomingMap[key].mins+=durMins(se.len);
+  });
+  const monthRows=Object.entries(monthMap).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>({...v,key:k}));
+  const upcomingRows=Object.entries(upcomingMap).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>({...v,key:k}));
+  const maxMonthMins=monthRows.length?Math.max(...monthRows.map(r=>r.mins)):1;
+
+  // School progress
   const schoolRows=filteredSchools.map(sc=>{
     const scSess=filteredSess.filter(se=>se.schoolId===sc.id);
     const scDone=scSess.filter(se=>se.status==='Completed').length;
-    return {sc, total:scSess.length, done:scDone};
+    return {sc,total:scSess.length,done:scDone};
   }).filter(r=>r.total>0).sort((a,b)=>b.done-a.done||(b.total-a.total));
 
-  const el=document.getElementById('reportBody');
-  el.innerHTML=`
+  document.getElementById('reportBody').innerHTML=`
 
-  <!-- Top KPI row -->
+  <!-- KPI cards -->
   <div class="report-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))">
     <div class="report-card" style="border-top:3px solid #1a5c1a">
       <div class="stat-big" style="color:#1a5c1a">${coreSchools}</div>
       <div class="stat-sub">Core schools</div>
-      <div style="margin-top:6px;font-size:12px;color:var(--text2)">${coreCompleted} of ${coreSess.length} sessions done</div>
+      <div style="margin-top:6px;font-size:12px;color:var(--text2)">${coreSess.filter(s=>s.status==='Completed').length} of ${coreSess.length} sessions done</div>
     </div>
     <div class="report-card" style="border-top:3px solid #5c1a5c">
       <div class="stat-big" style="color:#5c1a5c">${enrichSchools}</div>
       <div class="stat-sub">Enrichment schools</div>
-      <div style="margin-top:6px;font-size:12px;color:var(--text2)">${enrichCompleted} of ${enrichSess.length} sessions done</div>
+      <div style="margin-top:6px;font-size:12px;color:var(--text2)">${enrichSess.filter(s=>s.status==='Completed').length} of ${enrichSess.length} sessions done</div>
     </div>
     ${bothSchools?`<div class="report-card" style="border-top:3px solid #1a3a6b">
       <div class="stat-big" style="color:#1a3a6b">${bothSchools}</div>
       <div class="stat-sub">Core + Enrichment</div>
       <div style="margin-top:6px;font-size:12px;color:var(--text2)">${bothSess.filter(s=>s.status==='Completed').length} of ${bothSess.length} sessions done</div>
     </div>`:''}
-    <div class="report-card" style="border-top:3px solid var(--blue)">
-      <div class="stat-big" style="color:var(--blue)">${completionRate}%</div>
-      <div class="stat-sub">Completion rate</div>
-      <div style="margin-top:6px;font-size:12px;color:var(--text2)">${completedSess.length} of ${filteredSess.length} sessions</div>
-    </div>
     <div class="report-card" style="border-top:3px solid var(--green)">
       <div class="stat-big" style="color:var(--green)">${fmtHrs(totalMins)}</div>
       <div class="stat-sub">Total PD delivered</div>
-      <div style="margin-top:6px;font-size:12px;color:var(--text2)">Across completed sessions</div>
+      <div style="margin-top:6px;font-size:12px;color:var(--text2)">${completedSess.length} completed sessions</div>
     </div>
-    <div class="report-card" style="border-top:3px solid var(--amber)">
-      <div class="stat-big" style="color:var(--amber)">${noSessionSchools}</div>
-      <div class="stat-sub">Schools not yet scheduled</div>
-      <div style="margin-top:6px;font-size:12px;color:var(--text2)">${filteredSchools.length} total schools</div>
+    <div class="report-card" style="border-top:3px solid var(--amber);cursor:pointer" onclick="document.getElementById('unscheduled-list').style.display=document.getElementById('unscheduled-list').style.display==='none'?'block':'none'">
+      <div class="stat-big" style="color:var(--amber)">${unscheduledSchools.length}</div>
+      <div class="stat-sub">Not yet scheduled ↕</div>
+      <div id="unscheduled-list" style="display:none;margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+        ${unscheduledSchools.length?unscheduledSchools.map(s=>`<div style="font-size:12px;padding:2px 0;color:var(--text)">${s.name} <span style="font-size:10px;color:var(--text3)">${s.curriculum||''}</span></div>`).join(''):'<div style="font-size:12px;color:var(--green)">All schools have sessions!</div>'}
+      </div>
     </div>
   </div>
 
-  <!-- Session mode + label breakdown -->
+  <!-- Monthly breakdown -->
+  <div class="report-grid" style="grid-template-columns:1fr 1fr">
+    <div class="report-card">
+      <h3><svg viewBox="0 0 14 14"><rect x="1" y="3" width="12" height="8" rx="1"/><line x1="4" y1="1" x2="4" y2="5"/><line x1="10" y1="1" x2="10" y2="5"/></svg> Completed — by month</h3>
+      ${monthRows.length?`
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr>
+          <th style="text-align:left;padding:4px 6px;color:var(--text3);font-weight:600;font-size:10px;text-transform:uppercase">Month</th>
+          <th style="text-align:center;padding:4px 6px;color:var(--text3);font-weight:600;font-size:10px;text-transform:uppercase">Sessions</th>
+          <th style="text-align:right;padding:4px 6px;color:var(--text3);font-weight:600;font-size:10px;text-transform:uppercase">Hours</th>
+          <th style="padding:4px 6px;width:80px"></th>
+        </tr></thead>
+        <tbody>
+          ${monthRows.map(r=>`<tr>
+            <td style="padding:5px 6px;font-weight:500">${r.label}</td>
+            <td style="padding:5px 6px;text-align:center">${r.sessions} <span style="font-size:10px;color:var(--text3)">(${r.virtual}v ${r.inPerson}ip)</span></td>
+            <td style="padding:5px 6px;text-align:right;font-weight:600">${fmtHrs(r.mins)}</td>
+            <td style="padding:5px 6px"><div class="report-bar-wrap"><div class="report-bar" style="width:${Math.round(r.mins/maxMonthMins*100)}%;background:var(--green)"></div></div></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`:'<div style="color:var(--text3);font-size:13px;padding:8px 0">No completed sessions yet.</div>'}
+    </div>
+
+    <div class="report-card">
+      <h3><svg viewBox="0 0 14 14"><rect x="1" y="3" width="12" height="8" rx="1"/><line x1="4" y1="1" x2="4" y2="5"/><line x1="10" y1="1" x2="10" y2="5"/></svg> Upcoming scheduled — by month</h3>
+      ${upcomingRows.length?`
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr>
+          <th style="text-align:left;padding:4px 6px;color:var(--text3);font-weight:600;font-size:10px;text-transform:uppercase">Month</th>
+          <th style="text-align:center;padding:4px 6px;color:var(--text3);font-weight:600;font-size:10px;text-transform:uppercase">Sessions</th>
+          <th style="text-align:right;padding:4px 6px;color:var(--text3);font-weight:600;font-size:10px;text-transform:uppercase">Hours</th>
+        </tr></thead>
+        <tbody>
+          ${upcomingRows.map(r=>`<tr>
+            <td style="padding:5px 6px;font-weight:500">${r.label}</td>
+            <td style="padding:5px 6px;text-align:center">${r.sessions}</td>
+            <td style="padding:5px 6px;text-align:right;font-weight:600">${fmtHrs(r.mins)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`:'<div style="color:var(--text3);font-size:13px;padding:8px 0">No upcoming scheduled sessions.</div>'}
+    </div>
+  </div>
+
+  <!-- Session type + mode -->
   <div class="report-grid">
     <div class="report-card">
-      <h3><svg viewBox="0 0 14 14"><rect x="1" y="1" width="12" height="12" rx="1.5"/><line x1="4" y1="10" x2="4" y2="6"/><line x1="7" y1="10" x2="7" y2="4"/><line x1="10" y1="10" x2="10" y2="7"/></svg> Sessions by mode</h3>
-      <div class="report-row"><span>Virtual</span><span class="report-val">${virtualCount}</span></div>
-      <div class="report-row"><span>In-person</span><span class="report-val">${inPersonCount}</span></div>
-      <div class="report-row"><span>Virtual (completed)</span><span class="report-val">${completedSess.filter(s=>s.mode==='Virtual').length}</span></div>
-      <div class="report-row"><span>In-person (completed)</span><span class="report-val">${completedSess.filter(s=>s.mode==='In-person').length}</span></div>
-    </div>
-
-    <div class="report-card">
-      <h3><svg viewBox="0 0 14 14"><rect x="1" y="3" width="12" height="8" rx="1"/><line x1="4" y1="1" x2="4" y2="5"/><line x1="10" y1="1" x2="10" y2="5"/></svg> Sessions by type / label</h3>
+      <h3><svg viewBox="0 0 14 14"><line x1="1" y1="4" x2="13" y2="4"/><line x1="1" y1="8" x2="13" y2="8"/><line x1="1" y1="12" x2="13" y2="12"/></svg> Sessions by type / label</h3>
       ${labelRows.length?labelRows.map(([lbl,d])=>`
         <div class="report-row">
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px" title="${lbl}">${lbl}</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px" title="${lbl}">${lbl}</span>
           <span style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:11px;color:var(--text3)">${d.completed}/${d.total} done</span>
+            <span style="font-size:11px;color:var(--text3)">${d.completed}/${d.total}</span>
             <span class="report-val">${fmtHrs(d.mins)}</span>
           </span>
-        </div>`).join(''):'<div style="color:var(--text3);font-size:13px;padding:8px 0">No sessions yet</div>'}
+        </div>`).join(''):'<div style="color:var(--text3);font-size:13px;padding:8px 0">No sessions yet.</div>'}
+    </div>
+    <div class="report-card">
+      <h3><svg viewBox="0 0 14 14"><rect x="1" y="1" width="12" height="12" rx="1.5"/><line x1="4" y1="10" x2="4" y2="6"/><line x1="7" y1="10" x2="7" y2="4"/><line x1="10" y1="10" x2="10" y2="7"/></svg> Delivery mode</h3>
+      <div class="report-row"><span>Virtual</span><span class="report-val">${virtualCount}</span></div>
+      <div class="report-row"><span>In-person</span><span class="report-val">${inPersonCount}</span></div>
+      <div class="report-row"><span>Virtual completed</span><span class="report-val">${completedSess.filter(s=>s.mode==='Virtual').length}</span></div>
+      <div class="report-row"><span>In-person completed</span><span class="report-val">${completedSess.filter(s=>s.mode==='In-person').length}</span></div>
     </div>
   </div>
 
-  <!-- Staff time table -->
+  <!-- Staff time -->
   <div style="margin-bottom:24px">
-    <div class="report-section-title">Staff time breakdown</div>
+    <div class="report-section-title">Staff time in completed sessions</div>
     ${staffRows.length?`<table class="report-table">
       <thead><tr>
-        <th>Team member</th><th>Role</th><th>Sessions</th><th>Time delivered</th><th style="width:160px">Time (bar)</th>
+        <th>Team member</th><th>Role</th><th>Sessions</th><th>Time</th><th style="width:160px">Relative time</th>
       </tr></thead>
       <tbody>
         ${staffRows.map(r=>{
           const [bg,fg]=r.person.color||COLOR_PAIRS[0];
           const ini=r.person.name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
-          const barPct=Math.round(r.mins/maxMins*100);
           return `<tr>
             <td><div style="display:flex;align-items:center;gap:7px">
               <div style="width:22px;height:22px;border-radius:50%;background:${bg};color:${fg};font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ini}</div>
@@ -2226,19 +2286,19 @@ function renderReport(){
             <td><span style="font-size:11px;color:var(--text3)">${roleLabel(r.person.role)}</span></td>
             <td style="text-align:center">${r.sessions}</td>
             <td style="font-weight:600">${fmtHrs(r.mins)}</td>
-            <td><div class="report-bar-wrap"><div class="report-bar" style="width:${barPct}%;background:${bg};border:1px solid ${fg}40"></div></div></td>
+            <td><div class="report-bar-wrap"><div class="report-bar" style="width:${Math.round(r.mins/maxMins*100)}%;background:${bg};border:1px solid ${fg}40"></div></div></td>
           </tr>`;
         }).join('')}
       </tbody>
     </table>`:'<div style="color:var(--text3);font-size:13px;padding:8px 0">No completed sessions with staff assigned yet.</div>'}
   </div>
 
-  <!-- School breakdown table -->
+  <!-- School progress -->
   <div style="margin-bottom:24px">
     <div class="report-section-title">School progress</div>
     ${schoolRows.length?`<table class="report-table">
       <thead><tr>
-        <th>School</th><th>Curriculum</th><th>Type</th><th>Sessions</th><th>Completed</th><th style="width:120px">Progress</th>
+        <th>School</th><th>Curriculum</th><th>Type</th><th>Sessions</th><th>Done</th><th style="width:120px">Progress</th>
       </tr></thead>
       <tbody>
         ${schoolRows.map(r=>{
@@ -2251,12 +2311,10 @@ function renderReport(){
             <td><span style="font-size:11px;color:var(--text3)">${r.sc.type==='New school'?'New':'Returning'}</span></td>
             <td style="text-align:center">${r.total}</td>
             <td style="text-align:center">${r.done}</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:6px">
-                <div class="report-bar-wrap" style="flex:1"><div class="report-bar" style="width:${barPct}%;background:${barPct===100?'#2a6b3a':'#1a4d8f'}"></div></div>
-                <span style="font-size:11px;color:var(--text3);width:28px;text-align:right">${barPct}%</span>
-              </div>
-            </td>
+            <td><div style="display:flex;align-items:center;gap:6px">
+              <div class="report-bar-wrap" style="flex:1"><div class="report-bar" style="width:${barPct}%;background:${barPct===100?'#2a6b3a':'#1a4d8f'}"></div></div>
+              <span style="font-size:11px;color:var(--text3);width:28px;text-align:right">${barPct}%</span>
+            </div></td>
           </tr>`;
         }).join('')}
       </tbody>
