@@ -1655,36 +1655,38 @@ function parseDatesFromStr(str, yearHint){
   const mo={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
   const now=new Date();
   const currentYear=now.getFullYear();
-  return str.split(',').map(s=>{
+
+  // Pre-process: join "Month Day, Year" patterns before splitting on commas
+  // e.g. "May 15, 2026, Aug 12" → ["May 15 2026", "Aug 12"]
+  // Replace "Month DD, YYYY" with "Month DD YYYY" so the year stays with the date
+  const normalized = str.replace(/([a-zA-Z]+\s+\d{1,2}),\s*(\d{4})/g, '$1 $2');
+
+  return normalized.split(',').map(s=>{
     s=s.trim().toLowerCase();
-    const parts=s.split(/[\s\/\-]+/);
+    if(!s) return null;
+    const parts=s.split(/[\s\/\-]+/).filter(Boolean);
     if(parts.length>=2){
-      // Check if an explicit year is included (4-digit number)
       let month, day, year;
-      // Format: "Apr 12 2027" or "Apr 12, 2027"
       const yearPart=parts.find(p=>/^\d{4}$/.test(p));
       if(yearPart){
         year=parseInt(yearPart);
         const nonYear=parts.filter(p=>p!==yearPart);
         month=mo[nonYear[0]?.slice(0,3)];
-        day=parseInt(nonYear[1]);
+        day=parseInt(nonYear[1]||nonYear[0]);
       } else {
         month=mo[parts[0].slice(0,3)];
         day=parseInt(parts[1]);
-        // Smart year: use yearHint if given, otherwise pick whichever
-        // year (current or next) puts this date closest in the future
         if(yearHint){
           year=yearHint;
         } else {
           const thisYear=new Date(currentYear,month,day);
-          const nextYear=new Date(currentYear+1,month,day);
           // If date already passed by more than 60 days, use next year
           year=(now-thisYear>60*24*3600*1000)?currentYear+1:currentYear;
         }
       }
-      if(month!==undefined&&day) return new Date(year,month,day);
+      if(month!==undefined && !isNaN(day) && day>0) return new Date(year,month,day);
     }
-    // Try native parse as fallback (handles "2027-04-12" etc.)
+    // Fallback for ISO format like "2026-05-15"
     const dt=new Date(s); return isNaN(dt)?null:dt;
   }).filter(Boolean);
 }
