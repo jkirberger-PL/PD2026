@@ -2110,15 +2110,19 @@ function renderReport(){
   // Unscheduled schools
   const unscheduledSchools=filteredSchools.filter(sc=>!sessions.some(se=>se.schoolId===sc.id));
 
-  // Session type breakdown
-  const labelMap={};
+  // Session type breakdown — grouped by curriculum
+  const curricGroups={'Core':{},'Enrichment':{},'Core + Enrichment':{},'Other':{}};
   filteredSess.forEach(se=>{
     const lbl=se.label||'Untitled';
-    if(!labelMap[lbl]) labelMap[lbl]={total:0,completed:0,mins:0};
-    labelMap[lbl].total++;
-    if(se.status==='Completed'){labelMap[lbl].completed++;labelMap[lbl].mins+=durMins(se.len);}
+    const sc=filteredSchools.find(s=>s.id===se.schoolId);
+    const curric=sc?.curriculum||'Other';
+    const grp=curricGroups[curric]||curricGroups['Other'];
+    if(!grp[lbl]) grp[lbl]={total:0,completed:0,mins:0};
+    grp[lbl].total++;
+    if(se.status==='Completed'){grp[lbl].completed++;grp[lbl].mins+=durMins(se.len);}
   });
-  const labelRows=Object.entries(labelMap).sort((a,b)=>b[1].total-a[1].total);
+  // Only include groups that have sessions
+  const activeGroups=Object.entries(curricGroups).filter(([,g])=>Object.keys(g).length>0);
 
   // Staff time
   const staffTime={};
@@ -2267,14 +2271,22 @@ function renderReport(){
   <div class="report-grid">
     <div class="report-card">
       <h3><svg viewBox="0 0 14 14"><line x1="1" y1="4" x2="13" y2="4"/><line x1="1" y1="8" x2="13" y2="8"/><line x1="1" y1="12" x2="13" y2="12"/></svg> Sessions by type / label</h3>
-      ${labelRows.length?labelRows.map(([lbl,d])=>`
-        <div class="report-row">
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px" title="${lbl}">${lbl}</span>
-          <span style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:11px;color:var(--text3)">${d.completed}/${d.total}</span>
-            <span class="report-val">${fmtHrs(d.mins)}</span>
-          </span>
-        </div>`).join(''):'<div style="color:var(--text3);font-size:13px;padding:8px 0">No sessions yet.</div>'}
+      ${activeGroups.length?activeGroups.map(([curric,grp])=>{
+        const rows=Object.entries(grp).sort((a,b)=>b[1].total-a[1].total);
+        const curricColor={'Core':'#1a5c1a','Enrichment':'#5c1a5c','Core + Enrichment':'#1a3a6b','Other':'var(--text3)'}[curric]||'var(--text3)';
+        const curricBg={'Core':'#e8f4e8','Enrichment':'#f4e8f4','Core + Enrichment':'#e8eef8','Other':'var(--surface2)'}[curric]||'var(--surface2)';
+        return `<div style="margin-bottom:10px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:4px 7px;border-radius:6px;background:${curricBg};color:${curricColor};margin-bottom:4px;display:inline-block">${curric}</div>
+          ${rows.map(([lbl,d])=>`
+          <div class="report-row">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px" title="${lbl}">${lbl}</span>
+            <span style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:11px;color:var(--text3)">${d.completed}/${d.total}</span>
+              <span class="report-val">${fmtHrs(d.mins)}</span>
+            </span>
+          </div>`).join('')}
+        </div>`;
+      }).join(''):'<div style="color:var(--text3);font-size:13px;padding:8px 0">No sessions yet.</div>'}
     </div>
     <div class="report-card">
       <h3><svg viewBox="0 0 14 14"><rect x="1" y="1" width="12" height="12" rx="1.5"/><line x1="4" y1="10" x2="4" y2="6"/><line x1="7" y1="10" x2="7" y2="4"/><line x1="10" y1="10" x2="10" y2="7"/></svg> Delivery mode</h3>
