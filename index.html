@@ -557,6 +557,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="icon-btn" onclick="closeSessionModal()"><svg viewBox="0 0 12 12"><line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/></svg></button>
   </div>
   <div class="m-body">
+    <div class="fg"><label>Category <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text3)">(used for reporting)</span></label>
+      <select id="fSesCategory">
+        <option value="">— select a category —</option>
+        <optgroup label="Core">
+          <option>Core — Kickoff</option>
+          <option>Core — Check-in</option>
+          <option>Core — Planning</option>
+          <option>Core — Other</option>
+        </optgroup>
+        <optgroup label="Enrichment">
+          <option>Enrichment — Kickoff</option>
+          <option>Enrichment — Check-in</option>
+          <option>Enrichment — Planning</option>
+          <option>Enrichment — Other</option>
+        </optgroup>
+        <optgroup label="Other">
+          <option>General PD</option>
+          <option>Team Training</option>
+          <option>Other</option>
+        </optgroup>
+      </select>
+    </div>
     <div class="fg"><label>Session name / label <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text3)">(e.g. "Fall kickoff", "Spring follow-up")</span></label>
       <input id="fSesName" type="text" placeholder="e.g. Fall kickoff"></div>
     <div class="row2">
@@ -822,6 +844,7 @@ function refreshUI(){
 async function saveToFirestore(){
   if(isSyncing) return;
   isSyncing = true;
+  syncTimer = null; // clear so live listener knows save is in progress
   setSyncStatus('Saving…','#8f5a00');
   try{
     const {db, doc, setDoc} = window._fb;
@@ -844,7 +867,10 @@ function startLiveSync(){
   fbUnsubscribe = onSnapshot(ref, snapshot=>{
     if(!snapshot.exists()) return;
     const data = snapshot.data();
-    if(data.updatedAt && Date.now() - data.updatedAt < 3000) return;
+    // Skip if we have unsaved local changes pending (syncTimer is set)
+    // or if this snapshot was written very recently by us (within 8 seconds)
+    if(syncTimer) return; // local edits pending — don't overwrite
+    if(data.updatedAt && Date.now() - data.updatedAt < 8000) return;
     unpackState(data);
     persistLocal();
     refreshUI();
@@ -854,7 +880,6 @@ function startLiveSync(){
     if(err.code === 'permission-denied'){
       setSyncStatus('Permission denied — check Firestore rules','#8f2020');
     } else {
-      // Retry after 3 seconds
       setSyncStatus('Reconnecting…','#8f5a00');
       setTimeout(startLiveSync, 3000);
     }
@@ -889,7 +914,7 @@ function persist(){
   persistLocal();
   clearTimeout(syncTimer);
   setSyncStatus('Unsaved changes…','#8f5a00');
-  syncTimer = setTimeout(saveToFirestore, 1500);
+  syncTimer = setTimeout(saveToFirestore, 2500);
 }
 
 function persistLocal(){
@@ -1368,6 +1393,12 @@ function addToGCal(){
     'Created by PL Team Math Training Scheduler'
   ].filter(Boolean).join('\n');
 
+  // Shared team training calendar ID
+  const TEAM_CAL_ID = 'c_68c2929750bed9783191b793cb0b1f8eaa7d70c9bd2e91d80c3d883465d1a87e@group.calendar.google.com';
+
+  // Combine staff emails + shared calendar as guests
+  const allGuests=[...staffEmails, TEAM_CAL_ID].filter(Boolean);
+
   // Build Google Calendar URL
   const params=new URLSearchParams({
     action:'TEMPLATE',
@@ -1375,9 +1406,8 @@ function addToGCal(){
     details:desc,
     ...(startDt&&endDt?{dates:`${startDt}/${endDt}`}:{}),
     ...(sess.timezone?{ctz:sess.timezone}:{}),
-    // add=guests (comma separated emails)
-    ...(staffEmails.length?{add:staffEmails.join(',')}:{}),
-    // Google Meet is added automatically when conferencing=1 in new Google Calendar
+    src:TEAM_CAL_ID, // open in the shared calendar
+    ...(allGuests.length?{add:allGuests.join(',')}:{}),
     conferencing:'meet',
   });
 
@@ -1453,6 +1483,7 @@ function clearAll(){
 function openAddSession(schoolId){
   editSessionId=null; editSessionSchoolId=schoolId;
   document.getElementById('sessionModalTitle').textContent='Add session';
+  document.getElementById('fSesCategory').value='';
   document.getElementById('fSesName').value='';
   document.getElementById('fSesMode').value='Virtual';
   document.getElementById('fSesLen').value='Full day (8 hrs)';
@@ -1470,6 +1501,7 @@ function openAddSession(schoolId){
 function openEditSession(id){
   const se=sessions.find(x=>x.id===id); editSessionId=id; editSessionSchoolId=se.schoolId;
   document.getElementById('sessionModalTitle').textContent='Edit session';
+  document.getElementById('fSesCategory').value=se.category||'';
   document.getElementById('fSesName').value=se.label||'';
   document.getElementById('fSesMode').value=se.mode;
   document.getElementById('fSesLen').value=se.len;
@@ -1495,6 +1527,7 @@ function saveSession(){
   const entry={
     id:editSessionId||nextSessionId++,
     schoolId:editSessionSchoolId,
+    category:document.getElementById('fSesCategory').value,
     label:label||'Session',
     mode:document.getElementById('fSesMode').value,
     len:document.getElementById('fSesLen').value,
@@ -2110,16 +2143,16 @@ function renderReport(){
   // Unscheduled schools
   const unscheduledSchools=filteredSchools.filter(sc=>!sessions.some(se=>se.schoolId===sc.id));
 
-  // Session type breakdown — grouped by curriculum
+  // Session type breakdown — grouped by curriculum, using category field
   const curricGroups={'Core':{},'Enrichment':{},'Core + Enrichment':{},'Other':{}};
   filteredSess.forEach(se=>{
-    const lbl=se.label||'Untitled';
+    const cat=se.category||(se.label||'Uncategorized'); // fall back to label for old sessions without category
     const sc=filteredSchools.find(s=>s.id===se.schoolId);
     const curric=sc?.curriculum||'Other';
     const grp=curricGroups[curric]||curricGroups['Other'];
-    if(!grp[lbl]) grp[lbl]={total:0,completed:0,mins:0};
-    grp[lbl].total++;
-    if(se.status==='Completed'){grp[lbl].completed++;grp[lbl].mins+=durMins(se.len);}
+    if(!grp[cat]) grp[cat]={total:0,completed:0,mins:0};
+    grp[cat].total++;
+    if(se.status==='Completed'){grp[cat].completed++;grp[cat].mins+=durMins(se.len);}
   });
   // Only include groups that have sessions
   const activeGroups=Object.entries(curricGroups).filter(([,g])=>Object.keys(g).length>0);
