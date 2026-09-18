@@ -563,10 +563,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <optgroup label="Core">
           <option>Core — Admin Kick-off</option>
           <option>Core — BTS PD</option>
-          <option>Core — Admin Fall Check-in</option>
-          <option>Core — Teacher Fall Check-in</option>
-          <option>Core — Admin Spring Check-in</option>
-          <option>Core — Teacher Spring Check-in</option>
+          <option>Core — Fall Admin Check-in</option>
+          <option>Core — Fall Teacher Check-in</option>
+          <option>Core — Spring Admin Check-in</option>
+          <option>Core — Spring Teacher Check-in</option>
           <option>Core — Admin Year End Data Review</option>
           <option>Core — Other</option>
         </optgroup>
@@ -2148,16 +2148,16 @@ function renderReport(){
   // Unscheduled schools
   const unscheduledSchools=filteredSchools.filter(sc=>!sessions.some(se=>se.schoolId===sc.id));
 
-  // Session type breakdown — grouped by curriculum, using category field
+  // Session type breakdown — category dropdown only, no label fallback
   const curricGroups={'Core':{},'Enrichment':{},'Core + Enrichment':{},'Other':{}};
   filteredSess.forEach(se=>{
-    const cat=se.category||(se.label||'Uncategorized'); // fall back to label for old sessions without category
+    if(!se.category) return; // skip sessions with no category assigned
     const sc=filteredSchools.find(s=>s.id===se.schoolId);
     const curric=sc?.curriculum||'Other';
     const grp=curricGroups[curric]||curricGroups['Other'];
-    if(!grp[cat]) grp[cat]={total:0,completed:0,mins:0};
-    grp[cat].total++;
-    if(se.status==='Completed'){grp[cat].completed++;grp[cat].mins+=durMins(se.len);}
+    if(!grp[se.category]) grp[se.category]={total:0,completed:0,mins:0};
+    grp[se.category].total++;
+    if(se.status==='Completed'){grp[se.category].completed++;grp[se.category].mins+=durMins(se.len);}
   });
   // Only include groups that have sessions
   const activeGroups=Object.entries(curricGroups).filter(([,g])=>Object.keys(g).length>0);
