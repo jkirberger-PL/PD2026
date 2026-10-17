@@ -1414,7 +1414,6 @@ function addToGCal(){
     details:desc,
     ...(startDt&&endDt?{dates:`${startDt}/${endDt}`}:{}),
     ...(sess.timezone?{ctz:sess.timezone}:{}),
-    src:TEAM_CAL_ID, // open in the shared calendar
     ...(allGuests.length?{add:allGuests.join(',')}:{}),
     conferencing:'meet',
   });
