@@ -441,6 +441,27 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <option value="">All curriculum</option>
         <option>Core</option><option>Enrichment</option><option>Core + Enrichment</option>
       </select>
+      <select id="fMissingCat" onchange="renderCards()">
+        <option value="">All schools</option>
+        <optgroup label="Missing — Core">
+          <option value="Core — Admin Kick-off">Missing: Core — Admin Kick-off</option>
+          <option value="Core — BTS PD">Missing: Core — BTS PD</option>
+          <option value="Core — Fall Admin Check-in">Missing: Core — Fall Admin Check-in</option>
+          <option value="Core — Fall Teacher Check-in">Missing: Core — Fall Teacher Check-in</option>
+          <option value="Core — Spring Admin Check-in">Missing: Core — Spring Admin Check-in</option>
+          <option value="Core — Spring Teacher Check-in">Missing: Core — Spring Teacher Check-in</option>
+          <option value="Core — Admin Year End Data Review">Missing: Core — Admin Year End Data Review</option>
+          <option value="Core — Other">Missing: Core — Other</option>
+        </optgroup>
+        <optgroup label="Missing — Enrichment">
+          <option value="Enrichment — Admin Discovery Call">Missing: Enrichment — Admin Discovery Call</option>
+          <option value="Enrichment — Books Only">Missing: Enrichment — Books Only</option>
+          <option value="Enrichment — Online Only">Missing: Enrichment — Online Only</option>
+          <option value="Enrichment — Combo Books and Online">Missing: Enrichment — Combo Books and Online</option>
+          <option value="Enrichment — Follow Up">Missing: Enrichment — Follow Up</option>
+          <option value="Enrichment — Other">Missing: Enrichment — Other</option>
+        </optgroup>
+      </select>
       <select id="fPerson" onchange="renderCards()">
         <option value="">All team members</option>
       </select>
@@ -538,6 +559,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="fg"><label>Curriculum</label><select id="fSchoolCurriculum"><option>Core</option><option>Enrichment</option><option>Core + Enrichment</option></select></div>
       <div class="fg"><label>School size</label><select id="fSchoolSize"><option>Small (1–5 teachers)</option><option>Medium (6–15 teachers)</option><option>Large (16+ teachers)</option></select></div>
       <div class="fg"><label>Notes</label><input id="fSchoolNotes" type="text" placeholder=""></div>
+    </div>
+    <div class="row2">
+      <div class="fg"><label>City</label><input id="fSchoolCity" type="text" placeholder="e.g. Columbus"></div>
+      <div class="fg"><label>State</label><input id="fSchoolState" type="text" placeholder="e.g. OH" style="max-width:80px"></div>
     </div>
     <div class="fg"><label>School data spreadsheet link <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text3)">(paste Google Sheets URL)</span></label>
       <input id="fSchoolSheet" type="text" placeholder="https://docs.google.com/spreadsheets/d/..."></div>
@@ -1010,11 +1035,18 @@ function renderCards(){
   const fM=document.getElementById('fMode').value;
   const fT=document.getElementById('fType').value;
   const fC=document.getElementById('fCurriculum').value;
+  const fMC=document.getElementById('fMissingCat').value;
 
   let schoolList=schools.filter(sc=>{
     if(q&&!sc.name.toLowerCase().includes(q)) return false;
     if(fT&&sc.type!==fT) return false;
     if(fC&&sc.curriculum!==fC) return false;
+    // Only show schools that do NOT have a session with this category (scheduled or completed)
+    if(fMC){
+      const hasIt=sessions.some(se=>se.schoolId===sc.id && se.category===fMC &&
+        (se.status==='Scheduled'||se.status==='Confirmed'||se.status==='Completed'));
+      if(hasIt) return false;
+    }
     // filter by session attributes
     const scSess=sessions.filter(se=>se.schoolId===sc.id);
     if(fSt&&!scSess.some(se=>se.status===fSt)) return false;
@@ -1050,7 +1082,7 @@ function renderCards(){
             ${curricBadge(sc.curriculum)}
           </div>
           <div class="card-name">${sc.name}${sc.sheetUrl?` <a href="${sc.sheetUrl}" target="_blank" onclick="event.stopPropagation()" style="font-size:10px;font-weight:400;color:var(--blue);text-decoration:none;margin-left:4px" title="Open school spreadsheet">↗ Sheet</a>`:''}</div>
-          <div class="card-summary">${sessCount===0?'No sessions yet':sessCount+' session'+(sessCount>1?'s':'')+(schedCount?' · '+schedCount+' scheduled':' · none scheduled')}${sc.notes?' · '+sc.notes:''}</div>
+          <div class="card-summary">${[sc.city,sc.state].filter(Boolean).join(', ')||''}${(sc.city||sc.state)?' · ':''}${sessCount===0?'No sessions yet':sessCount+' session'+(sessCount>1?'s':'')+(schedCount?' · '+schedCount+' scheduled':' · none scheduled')}${sc.notes?' · '+sc.notes:''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:4px">
           <div class="card-actions" onclick="event.stopPropagation()">
@@ -1439,6 +1471,8 @@ function openAddSchool(){
   document.getElementById('fSchoolType').value='New school';
   document.getElementById('fSchoolSize').value='Small (1–5 teachers)';
   document.getElementById('fSchoolNotes').value='';
+  document.getElementById('fSchoolCity').value='';
+  document.getElementById('fSchoolState').value='';
   document.getElementById('fSchoolSheet').value='';
   document.getElementById('schoolModal').style.display='flex';
 }
@@ -1451,6 +1485,8 @@ function openEditSchool(id){
   document.getElementById('fSchoolType').value=sc.type;
   document.getElementById('fSchoolSize').value=sc.size;
   document.getElementById('fSchoolNotes').value=sc.notes||'';
+  document.getElementById('fSchoolCity').value=sc.city||'';
+  document.getElementById('fSchoolState').value=sc.state||'';
   document.getElementById('fSchoolSheet').value=sc.sheetUrl||'';
   document.getElementById('schoolModal').style.display='flex';
 }
@@ -1464,6 +1500,8 @@ function saveSchool(){
     type:document.getElementById('fSchoolType').value,
     size:document.getElementById('fSchoolSize').value,
     notes:document.getElementById('fSchoolNotes').value.trim(),
+    city:document.getElementById('fSchoolCity').value.trim(),
+    state:document.getElementById('fSchoolState').value.trim().toUpperCase(),
     sheetUrl:document.getElementById('fSchoolSheet').value.trim(),
   };
   if(editSchoolId) schools=schools.map(x=>x.id===editSchoolId?entry:x);
