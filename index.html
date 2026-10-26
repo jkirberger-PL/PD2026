@@ -492,6 +492,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <option value="">All curriculum</option>
       <option>Core</option><option>Enrichment</option><option>Core + Enrichment</option>
     </select>
+    <select id="calFPerson" onchange="renderCal()" style="font-family:inherit;font-size:13px;padding:5px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);color:var(--text)">
+      <option value="">All staff</option>
+    </select>
     <div class="cal-mode-toggle">
       <button class="cal-mode-btn active" id="calModeMonth" onclick="setCalMode('month')">Month</button>
       <button class="cal-mode-btn" id="calModeWeek" onclick="setCalMode('week')">Week</button>
@@ -1007,6 +1010,12 @@ function updatePersonFilter(){
   const cur=sel.value;
   sel.innerHTML='<option value="">All team members</option>'+
     people.map(p=>`<option value="${p.id}"${String(p.id)===cur?' selected':''}>${p.name} (${roleLabel(p.role)})</option>`).join('');
+
+  // Also update calendar person filter
+  const calSel=document.getElementById('calFPerson'); if(!calSel)return;
+  const calCur=calSel.value;
+  calSel.innerHTML='<option value="">All staff</option>'+
+    people.map(p=>`<option value="${p.id}"${String(p.id)===calCur?' selected':''}>${p.name}</option>`).join('');
 }
 
 // ── Stats ─────────────────────────────────────────────────
@@ -1772,11 +1781,12 @@ function parseDatesFromStr(str, yearHint){
 function dateKey(d){ return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
 
 // Build map: dateKey → [{session, school, dates[]}]
-function buildCalMap(curricFilter=''){
+function buildCalMap(curricFilter='', personFilter=''){
   const map = {};
   sessions.forEach(sess=>{
     const school = schools.find(s=>s.id===sess.schoolId);
     if(curricFilter && school?.curriculum !== curricFilter) return;
+    if(personFilter && !(sess.staff||[]).map(String).includes(String(personFilter))) return;
     const dates = parseDatesFromStr(sess.dates);
     dates.forEach(dt=>{
       const k=dateKey(dt);
@@ -1818,7 +1828,7 @@ function renderMonth(){
   const monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
   document.getElementById('calPeriodLabel').textContent=`${monthNames[m]} ${y}`;
 
-  const map=buildCalMap(document.getElementById('calFCurriculum')?.value||'');
+  const map=buildCalMap(document.getElementById('calFCurriculum')?.value||'', document.getElementById('calFPerson')?.value||'');
   const today=new Date(); const todayKey=dateKey(today);
   const firstDay=new Date(y,m,1).getDay(); // 0=Sun
   const daysInMonth=new Date(y,m+1,0).getDate();
@@ -1897,7 +1907,7 @@ function renderWeekCal(){
   const label=`${monthNames[weekDates[0].getMonth()]} ${weekDates[0].getDate()} – ${monthNames[weekDates[6].getMonth()]} ${weekDates[6].getDate()}, ${weekDates[6].getFullYear()}`;
   document.getElementById('calPeriodLabel').textContent=label;
 
-  const map=buildCalMap(document.getElementById('calFCurriculum')?.value||'');
+  const map=buildCalMap(document.getElementById('calFCurriculum')?.value||'', document.getElementById('calFPerson')?.value||'');
   const today=new Date(); const todayKey=dateKey(today);
   const dowNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
