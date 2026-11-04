@@ -2169,6 +2169,7 @@ function renderStaffView(){
 // ── Reports view ──────────────────────────────────────────
 function renderReport(){
   try {
+  const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const curricF = document.getElementById('reportCurricFilter')?.value||'';
 
   const filteredSchools = schools.filter(s=> !curricF || s.curriculum===curricF);
@@ -2252,7 +2253,6 @@ function renderReport(){
   });
 
   // Monthly breakdown — sessions completed and hours by month
-  const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const monthMap={};
   completedSess.forEach(se=>{
     const dates=parseDatesFromStr(se.dates);
