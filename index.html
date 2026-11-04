@@ -2225,6 +2225,29 @@ function renderReport(){
   const staffRows=Object.values(staffTime).sort((a,b)=>b.mins-a.mins);
   const maxMins=staffRows.length?staffRows[0].mins:1;
 
+  // Monthly breakdown by staff member
+  const staffMonthly={}; // {personId: {monthKey: {label, sessions, mins}}}
+  const allMonthKeys=new Set();
+  completedSess.forEach(se=>{
+    const dates=parseDatesFromStr(se.dates);
+    if(!dates.length) return;
+    const d=dates[0];
+    const key=`${d.getFullYear()}-${String(d.getMonth()).padStart(2,'0')}`;
+    const label=`${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+    allMonthKeys.add(key);
+    (se.staff||[]).forEach(id=>{
+      const p=people.find(x=>x.id===id); if(!p)return;
+      if(!staffMonthly[id]) staffMonthly[id]={person:p,months:{}};
+      if(!staffMonthly[id].months[key]) staffMonthly[id].months[key]={label,sessions:0,mins:0};
+      staffMonthly[id].months[key].sessions++;
+      staffMonthly[id].months[key].mins+=durMins(se.len);
+    });
+  });
+  const sortedMonthKeys=[...allMonthKeys].sort();
+  const staffMonthlyRows=Object.values(staffMonthly).sort((a,b)=>
+    (staffTime[people.indexOf(b.person)]?.mins||0)-(staffTime[people.indexOf(a.person)]?.mins||0)
+  );
+
   // Monthly breakdown — sessions completed and hours by month
   const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const monthMap={};
@@ -2409,6 +2432,48 @@ function renderReport(){
         }).join('')}
       </tbody>
     </table>`:'<div style="color:var(--text3);font-size:13px;padding:8px 0">No completed sessions with staff assigned yet.</div>'}
+  </div>
+
+  <!-- Staff time by month -->
+  <div style="margin-bottom:24px">
+    <div class="report-section-title">Staff sessions & hours — by month</div>
+    ${sortedMonthKeys.length&&staffMonthlyRows.length?`
+    <div style="overflow-x:auto">
+    <table class="report-table" style="min-width:500px">
+      <thead><tr>
+        <th style="min-width:120px">Team member</th>
+        <th>Role</th>
+        ${sortedMonthKeys.map(k=>{
+          const r=Object.values(staffMonthly).find(s=>s.months[k]);
+          const lbl=r?r.months[k].label:k;
+          return `<th style="text-align:center;min-width:90px">${lbl}</th>`;
+        }).join('')}
+        <th style="text-align:right">Total</th>
+      </tr></thead>
+      <tbody>
+        ${staffMonthlyRows.map(r=>{
+          const [bg,fg]=r.person.color||COLOR_PAIRS[0];
+          const ini=r.person.name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
+          const totSess=Object.values(r.months).reduce((s,m)=>s+m.sessions,0);
+          const totMins=Object.values(r.months).reduce((s,m)=>s+m.mins,0);
+          return `<tr>
+            <td><div style="display:flex;align-items:center;gap:7px">
+              <div style="width:22px;height:22px;border-radius:50%;background:${bg};color:${fg};font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ini}</div>
+              ${r.person.name}
+            </div></td>
+            <td><span style="font-size:11px;color:var(--text3)">${roleLabel(r.person.role)}</span></td>
+            ${sortedMonthKeys.map(k=>{
+              const m=r.months[k];
+              return m
+                ? `<td style="text-align:center">${m.sessions} <span style="font-size:10px;color:var(--text3)">${fmtHrs(m.mins)}</span></td>`
+                : `<td style="text-align:center;color:var(--text3)">—</td>`;
+            }).join('')}
+            <td style="text-align:right;font-weight:600">${totSess} · ${fmtHrs(totMins)}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div>`
+    :'<div style="color:var(--text3);font-size:13px;padding:8px 0">No completed sessions with staff assigned yet.</div>'}
   </div>
 
   <!-- School progress -->
