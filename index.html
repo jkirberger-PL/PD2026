@@ -2168,6 +2168,7 @@ function renderStaffView(){
 
 // ── Reports view ──────────────────────────────────────────
 function renderReport(){
+  try {
   const curricF = document.getElementById('reportCurricFilter')?.value||'';
 
   const filteredSchools = schools.filter(s=> !curricF || s.curriculum===curricF);
@@ -2505,6 +2506,11 @@ function renderReport(){
       </tbody>
     </table>`:'<div style="color:var(--text3);font-size:13px;padding:8px 0">No schools with sessions yet.</div>'}
   </div>`;
+  } catch(e) {
+    console.error('renderReport error:', e);
+    const el=document.getElementById('reportBody');
+    if(el) el.innerHTML=`<div style="color:var(--red);padding:16px;font-size:13px">Report error: ${e.message}<br><pre style="font-size:11px;margin-top:8px">${e.stack}</pre></div>`;
+  }
 }
 
 // ── Init ──────────────────────────────────────────────────
