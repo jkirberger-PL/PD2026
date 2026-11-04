@@ -2244,9 +2244,11 @@ function renderReport(){
     });
   });
   const sortedMonthKeys=[...allMonthKeys].sort();
-  const staffMonthlyRows=Object.values(staffMonthly).sort((a,b)=>
-    (staffTime[people.indexOf(b.person)]?.mins||0)-(staffTime[people.indexOf(a.person)]?.mins||0)
-  );
+  const staffMonthlyRows=Object.values(staffMonthly).sort((a,b)=>{
+    const aMins=Object.values(a.months).reduce((s,m)=>s+m.mins,0);
+    const bMins=Object.values(b.months).reduce((s,m)=>s+m.mins,0);
+    return bMins-aMins;
+  });
 
   // Monthly breakdown — sessions completed and hours by month
   const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
